@@ -9,6 +9,13 @@ import PatientDataPage from './pages/PatientDataPage.vue'
 import SleepStageDetectionPage from './pages/SleepStageDetectionPage.vue'
 import EventsClassificationPage from './pages/EventsClassificationPage.vue'
 import MonitoringPage from './pages/MonitoringPage.vue'
+import D3Example from './pages/D3Example.vue'
+import DemoPage from './pages/DemoPage.vue'
+import ElementPlus from 'element-plus'
+import 'element-plus/dist/index.css'
+import en from 'element-plus/dist/locale/en.mjs'
+import * as ElementPlusIconsVue from '@element-plus/icons-vue'
+
 
 
 const router = VueRouter.createRouter({
@@ -34,6 +41,12 @@ const router = VueRouter.createRouter({
     }, {
         path: '/settings',
         component: SettingsPage
+    }, {
+        path: '/d3-example',
+        component: D3Example
+    }, {
+        path: '/demo',
+        component: DemoPage
     }] 
  })
 

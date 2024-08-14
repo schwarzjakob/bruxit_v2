@@ -1,26 +1,26 @@
 <template>
-  <img alt="Vue logo" src="./assets/logo.png">
-  <HelloWorld msg="Welcome to Your Vue.js App"/>
+  <el-row>
+    <el-col :span="23">
+      <HomeButton/>
+    </el-col>
+    <el-col :span="1">
+      <SettingsButton/>
+    </el-col>
+    </el-row>
+  <div class="page-wrap">
+    <router-view></router-view>
+  </div>
+
 </template>
 
 <script>
-import HelloWorld from './components/HelloWorld.vue'
-
+import HomeButton from './components/HomeButton.vue';
+import SettingsButton from './components/SettingsButton.vue';
 export default {
   name: 'App',
   components: {
-    HelloWorld
-  }
+    HomeButton,
+    SettingsButton
+  },
 }
 </script>
-
-<style>
-#app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-align: center;
-  color: #2c3e50;
-  margin-top: 60px;
-}
-</style>

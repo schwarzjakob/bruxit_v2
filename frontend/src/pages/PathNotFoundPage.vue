@@ -1,6 +1,5 @@
 <template>
     <PathNotFound />
-
 </template>
 <script>
 import PathNotFound from '../components/PathNotFound.vue'

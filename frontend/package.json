@@ -8,8 +8,18 @@
     "lint": "vue-cli-service lint"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.1",
+
+    "@observablehq/plot": "^0.6.15",
+
     "core-js": "^3.8.3",
+    "csv-loader": "^3.0.5",
+    "d3": "^7.9.0",
+    "d3-selection": "^3.0.0",
+    "echarts": "^5.5.1",
+    "element-plus": "^2.7.8",
     "localforage": "^1.10.0",
+    "plotly.js-dist": "^2.34.0",
     "pouchdb-utils": "^9.0.0",
     "vue": "^3.2.13",
     "vue-router": "^4.4.0",
