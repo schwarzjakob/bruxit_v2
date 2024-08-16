@@ -1,5 +1,9 @@
-import { createApp } from 'vue'
-import App from './App.vue'
+import 'element-plus/dist/index.css';
+import { createApp } from 'vue';
+import App from './App.vue';
+import ElementPlus from 'element-plus';
+import en from 'element-plus/dist/locale/en.mjs'
+import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import store from './store'
 import * as VueRouter from 'vue-router'
 import PathNotFoundPage from './pages/PathNotFoundPage.vue'
@@ -11,10 +15,6 @@ import EventsClassificationPage from './pages/EventsClassificationPage.vue'
 import MonitoringPage from './pages/MonitoringPage.vue'
 import D3Example from './pages/D3Example.vue'
 import DemoPage from './pages/DemoPage.vue'
-import ElementPlus from 'element-plus'
-import 'element-plus/dist/index.css'
-import en from 'element-plus/dist/locale/en.mjs'
-import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
 
 
