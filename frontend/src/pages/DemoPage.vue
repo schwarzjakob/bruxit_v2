@@ -13,6 +13,8 @@
     <el-button type="info" @click="toggleImage" style="margin-left: 20px; margin-top: 10px" plain>
       {{ isImageVisible ? 'Hide' : 'Show' }} Image
     </el-button>
+</el-row>
+<el-row justify="center">
     <el-image v-if="isImageVisible" :src="nightPredImg" style="max-width: 1000px"/>
 </el-row>
 
@@ -164,28 +166,41 @@ export default {
 
         async initializeChart(){
             this.chart = echarts.init(this.$refs.chart);
-
             const option = {
                 tooltip: {
-                    trigger: 'axis',
-                    axisPointer: {
+                trigger: 'axis',
+                axisPointer: {
                         type: 'cross'
-                    },
-                    borderWidth: 1,
-                    borderColor: '#ccc',
-                    padding: 10,
-                    textStyle: {
-                    color: '#000'
-                    },
-                    position: function (pos, params, el, elRect, size) {
-                    const obj = {
-                        top: 10
-                    };
-                    obj[['left', 'right'][+(pos[0] < size.viewSize[0] / 2)]] = 30;
-                    return obj;
-                    }
+                        },
+                        borderWidth: 1,
+                        borderColor: '#ccc',
+                        padding: 10,
+                        textStyle: {
+                        color: '#000'
+                        },
+                        position: function (pos, params, el, elRect, size) {
+                        const obj = {
+                            top: 10
+                        };
+                        obj[['left', 'right'][+(pos[0] < size.viewSize[0] / 2)]] = 30;
+                        return obj;
+                        }
                 },
-                
+                axisPointer: {
+                        link: [
+                        {
+                            xAxisIndex: 'all'
+                        }
+                        ],
+                        label: {
+                        backgroundColor: '#777'
+                        }
+                },
+                legend: {
+                    bottom: 10,
+                    left: 'center',
+                    data: ['MR', 'ML', 'ECG']
+                },
                 grid: [
                 { left: '10%', right: '10%', top: '5%', height: '25%' },  // MR
                 { left: '10%', right: '10%', top: '38%', height: '25%' }, // ML
@@ -197,10 +212,12 @@ export default {
                     type: 'category',
                     name: 'Time (s)',
                     data: this.timeAxis,
+                    /*
                     axisLabel: {
                         formatter: '{value}s',
-                        interval: 10*256
+                        interval: 25*256
                     },
+                    */
                 },
                 {
                     gridIndex: 1,
@@ -208,7 +225,8 @@ export default {
                     name: 'Time (s)',
                     data: this.timeAxis,
                     axisLabel: {
-                        formatter: '{value}s'
+                        formatter: '{value}s',
+                        interval: 25*256
                     },
                 },
                 {
@@ -217,7 +235,8 @@ export default {
                     name: 'Time (s)',
                     data: this.timeAxis,
                     axisLabel: {
-                        formatter: '{value}s'
+                        formatter: '{value}s',
+                        interval: 25*256
                     },
                 }
                 ],

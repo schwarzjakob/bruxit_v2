@@ -15,6 +15,7 @@ import EventsClassificationPage from './pages/EventsClassificationPage.vue'
 import MonitoringPage from './pages/MonitoringPage.vue'
 import D3Example from './pages/D3Example.vue'
 import DemoPage from './pages/DemoPage.vue'
+import ECPage from './pages/ECPage.vue';
 
 
 
@@ -47,7 +48,11 @@ const router = VueRouter.createRouter({
     }, {
         path: '/demo',
         component: DemoPage
-    }] 
+    },
+    {
+        path: '/ec',
+        component: ECPage
+    },] 
  })
 
 router.beforeEach(async (to, from, next) => {
