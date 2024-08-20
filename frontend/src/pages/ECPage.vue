@@ -2,74 +2,171 @@
     <!--HEADER ROW-->
     <el-row style="margin-top: 10px;">
         <el-col :span="2"><el-button type="primary"> <el-icon> <ArrowLeft /> </el-icon> Sleep Stage Detection</el-button></el-col>
-        <el-col :span="1" :offset="2"><el-tag type="success">Advanced</el-tag></el-col>
+        <el-col :span="1" :offset="2"><el-tag type="success" size="large">Advanced</el-tag></el-col>
         <el-col :span="13" :offset="1"><PipelineStepper :step="3"/></el-col>
         <el-col :span="2" :offset="1"><el-button type="primary"> Monitoring Dashboards  <el-icon> <ArrowRight /> </el-icon></el-button></el-col>
     </el-row>
 
     <!--IMAGE ROW-->
     <el-row justify="center">
-        <h3>Signal and predicted events: Patient 1, w1, night 1022102</h3>
-        <el-button type="info" @click="toggleImage" style="margin-left: 20px; margin-top: 10px" plain>
-        {{ isImageVisible ? 'Hide' : 'Show' }} Image
-        </el-button>
+        <h2> Patient 1, w1, night 1022102</h2>
     </el-row>
     <el-row justify="center">
-        <el-image v-if="isImageVisible" :src="nightPredImg" style="max-width: 1000px"/>
+        <h3>Signal and predicted events</h3>
+        <el-button type="info" @click="toggleImage" style="margin-left: 20px; margin-top: 10px" plain>
+        {{ isImageVisible ? 'Hide' : 'Show' }} Image
+        </el-button>    
+    </el-row>
+    <el-row justify="center">
+        <el-image v-if="isImageVisible" :src="nightPredImg" style="max-width: 900px" :preview-src-list="[nightPredImg]" fit="cover"/>
     </el-row>
 
     <el-row :gutter="20">
-            <el-col :span="6">
-                <el-card style="max-width: 480px">
-                    <h2>Events predicted</h2>
+        <!--EVENTS PREDICTED ZONE-->
+        <el-col :span="6">
+            <el-card style="max-width: 480px">
+                <h2>Events predicted</h2>
 
-                    <p><u>Cycle 2</u></p>
-                    <el-card class="text item">
-                        <p v-if="edited"><i>Edited</i></p>
-                        <el-button type="primary" round @click="zoomToEvent" style="margin-bottom: 10px">Event 1</el-button>
+                <p><u>Cycle 2</u></p>
+                <el-card class="text item" v-for="i in parseInt(amountEvents)" :key="i" :style="amountEvents === 2 ? specialStyle: ''">
+                    <p v-if="edited"><i>Edited</i></p>
+                    <div>
+                    <el-button type="primary" round @click="zoomToEvent" style="margin-bottom: 10px; margin-right: 200px;"><el-tooltip content="Click to zoom" placement="top">Event {{ i }}</el-tooltip></el-button>
+                        <el-popover
+                            placement="top-start"
+                            :title="`Event ${i}`"
+                            :width="200"
+                            trigger="hover"
+                        >
+                            <b>Amplitude</b><br>
+                            Min: 0.17 mV <br>   Max: 1.41 mV  <br>  Median: 0.60 mV<br>
+                            <b>ECG Rate</b><br>
+                            Min: 72.31 bpm  <br>  Max: 76.42 bpm  <br>  Median: 74.07 bpm<br>
+                            <b>HRV Metrics</b><br>
+                            LF/HF (5 min): <br>Mean (5 min):<br> SD (90 min): <br>SD (5 min): <br>SD (5 s before & after event): <br>SD (event): 
+
+                            <template #reference>
+                                <el-icon size="large" color='#409EFF'><InfoFilled /></el-icon>
+                            </template>
+                        </el-popover>
+                    </div>  
+
+                    <div style="margin-left: 10px;">
                         <el-row>
-                            Start (s)   <el-input-number v-model="num1" placeholder="Start" :step="0.01" :min="0" :max="300" size="small" @change="handleChange(num1)" style="width: 100px; margin-bottom: 10px;"/>
+                            <div>
+                                Start (s)   <el-input-number v-model="num1" placeholder="Start" :step="0.01" :min="0" :max="300" size="small" @change="handleChange(num1)" style="width: 100px; margin-bottom: 10px; margin-left: 5px;"/>
+                            </div>
+                            <div>
+                                End (s)   <el-input-number v-model="num2" :step="0.01" :min="0" :max="300" size="small" @change="handleChange(num2)" style="width: 100px; margin-bottom: 10px; margin-left: 10px;"/>
+                            </div>
                         </el-row>
                         <el-row>
-                            End (s)   <el-input-number v-model="num2" :step="0.01" :min="0" :max="300" size="small" @change="handleChange(num2)" style="width: 100px"/>
+                            <p><b>SD (event):</b>  4.2   <b style="margin-left: 10px;">Duration: </b> 5 s</p>
                         </el-row>
                         <el-row>
-                            <p><b>SDNN:</b>  4.2     <b>Duration: </b> 5 s</p>
+                            <div>
+                                Event type:     <el-button type="info" size="small" plain style="margin-left: 10px;"><el-icon><PriceTag /></el-icon> Phasic</el-button> <el-button type="info" size="small" plain>+ Add tag <el-icon><PriceTag /></el-icon></el-button>
+                            </div>
                         </el-row>
                         <el-row>
-                            Event type:     <el-button type="info" size="small" plain><el-icon><PriceTag /></el-icon> Phasic</el-button> <el-button type="info" size="small" plain>+ Add tag <el-icon><PriceTag /></el-icon></el-button>
+                            <el-switch
+                                v-model="event1Confirm"
+                                class="mb-2"
+                                style="--el-switch-on-color: #13ce66; --el-switch-off-color: #ff4949; margin-left: 40%; margin-top: 20px;"
+                                active-text="Confirm"
+                                inactive-text="Discard"
+                            />
                         </el-row>
-                    </el-card>
+                        <el-row v-if="event1Confirm">
+                            <div style="margin-top: 5px; margin-left: 40%;">Include: </div>
+                            <el-checkbox-group v-model="checkboxGroup" style="margin-left: 10px;">
+                                <el-checkbox-button v-for="sensor in sensors" :key="sensor" :value="sensor">
+                                    {{sensor}}
+                                </el-checkbox-button>
+                            </el-checkbox-group>
+                        </el-row>
+                    </div>
                 </el-card>
-            </el-col>
-            <el-col :span="18">
-                <div>
-                    <!-- Chart container -->
-                    <div v-if="!chartInitialized">Loading chart...</div>
-                    <el-button id="edit-button">Edit mode</el-button>
-                    <el-button id="add-event-button">+ Add event</el-button>
-                    
-                    <div id="myChart" style="width: 100%; height: 550px;"></div>
-                    <div id="ecgChart" style="width: 100%; height: 300px;"></div>
-                    <el-row>
-                        <el-label for="yValue" :span="2">Threshold:</el-label>
-                        <input type="number" :span="5" id="yValue" :value="(0.1*this.mvc).toFixed(2)" step="0.2"/>
-                        <el-button id="updateMarkLine" :span="4">Update Threshold</el-button>
-                    </el-row>
-                    <!-- Loading indicator -->
-                    <div v-if="startSelection && endSelection"> Start: {{ startSelection }} s, End: {{ endSelection }} s , Duration: {{ duration }} s</div>
-                </div>
-            </el-col>
-    </el-row>
+            </el-card>
 
+            <el-button style=" margin-top: 10px; width: 380px" type="primary" >
+                <el-icon> <Refresh /> </el-icon> Retrain model
+            </el-button>
+    
+        </el-col>
+
+        <!--CHARTS ZONE-->
+        <el-col :span="17">
+            <el-row>
+                <div style="margin-left: 10px">
+                <el-label for="yValue" :span="2" style="margin-right: 10px; margin-top: 5px;">Threshold:</el-label>
+                <el-input type="number" v-model="threshold" :span="5" id="yValue"  step="0.2" style="margin-right: 10px; width:100px"/>
+                <el-button id="updateMarkLine" :span="4">Update Threshold</el-button>
+                </div>
+                <div style="margin-left: 30%;">
+                    <el-checkbox-group v-model="checkboxGroup2" style="margin-left: 10px;">
+                        <el-checkbox-button v-for="sensor in sensors" :key="sensor" :value="sensor">
+                            {{sensor}}
+                        </el-checkbox-button>
+                    </el-checkbox-group>
+                </div>
+
+                <div style="margin-left: 30px">
+                    <el-button id="edit-button" :plain="true" :type="buttonType" @click="clickButton">
+                        Edit Mode
+                    </el-button>
+                </div>
+                <div v-if="selectionActive && startSelection && endSelection" style="margin-left: 30px">
+                    <el-popover
+                        placement="bottom"
+                        title="Add event"
+                        :width="250"
+                        trigger="click"
+                        content="this is content, this is content, this is content"
+                    >
+                    <el-form :model="eventForm" class="form-container">
+                        <el-form-item label="Start (s)">
+                        <el-input-number v-model="eventForm.start" :min="0" label="Start Time" />
+                        </el-form-item>
+                        <el-form-item label="End (s)">
+                        <el-input-number v-model="eventForm.end" :min="0" label="End Time" />
+                        </el-form-item>
+                        <b>Duration: {{ (eventForm.end - eventForm.start).toFixed(2)}} s</b>
+                        <el-form-item style="margin-top: 5px;">
+                        <el-button type="primary" @click="submitForm">Submit</el-button>
+                        </el-form-item>
+                    </el-form>
+                        <template #reference>
+                        <el-badge is-dot class="item">
+                           <el-button class="m-2" @click="updateSelectionValues">+ Add</el-button> 
+                        </el-badge>
+                        </template>
+                    </el-popover>
+                </div>
+                <div style="margin-left: 30px">
+                    <el-button id="zoom-button" :plain="true" :disabled="zoomDisabled">
+                        Zoom
+                    </el-button>    
+                </div>
+            </el-row>
+
+            <div v-if="!chartInitialized">Loading chart...</div>
+
+            <div id="myChart" style="width: 100%; height: 550px; margin-top: 10px"></div>
+            <!-- Loading indicator -->
+            <div v-if="startSelection && endSelection"> Start: {{ startSelection }} s, End: {{ endSelection }} s , Duration: {{ duration }} s</div>
+        </el-col>
+    </el-row>
   </template>
   
   <script>
   import { ref } from 'vue'
   import * as echarts from 'echarts';
   import csv from '../assets/1022102cFnorm_rms_5_min_256Hz.csv'; // Adjust the path as needed
-  import { PriceTag } from '@element-plus/icons-vue'
+  import { PriceTag, Refresh, InfoFilled } from '@element-plus/icons-vue'
   import img from '../../../backend/src/data/p1_wk1/1022102.png'
+  import { reactive } from 'vue'
+  import PipelineStepper from '../components/PipelineStepper.vue'
   
 
 
@@ -83,6 +180,7 @@
             MR: [],
             ECG: [],
             timeAxis: [],
+            threshold: ref((0.1*5).toFixed(2)),
             chartInitialized: false,
             startSelection: null,
             endSelection: null,
@@ -93,10 +191,29 @@
             amountEvents: 1,
             nightPredImg: img,
             isImageVisible: true,
+            sensors: ['MR', 'ML'],
+            checkboxGroup: ref(['MR']),
+            checkboxGroup2: ref(['MR']),
+            event1Confirm: ref(true),
+            buttonType: "",
+            selectionActive: false,
+            showSelectionDialog: false,
+            zoomDisabled: false,
+            eventForm: reactive({
+                        start: 0,
+                        end: 0,
+                        }),
+            specialStyle: {
+                marginBottom: "10px",
+                borderColor: "#409EFF"
+            }
         }
     },
     components: {
-        PriceTag
+        PriceTag,
+        Refresh,
+        InfoFilled,
+        PipelineStepper
     },
     async mounted() {
       await this.processDataAndInitializeChart(); // Wait for data processing before initializing the chart
@@ -156,6 +273,52 @@
                     this.duration = (this.endSelection - this.startSelection).toFixed(2);
                 }
             }
+        },
+        async markEvent(start, end){
+            this.amountEvents++;
+            const option = this.chart.getOption();
+            if (!option.series || option.series.length === 0) {
+                console.error('No series found in chart options');
+                return;
+            }
+            // Initialize markArea if not present
+            option.series[0].markArea = option.series[0].markArea || { data: [] };
+
+            // Add new markArea
+            option.series[0].markArea.data.push(
+                [
+                    {
+                        name: 'Event ' + this.amountEvents,
+                        xAxis: Math.floor(start*256),
+                        yAxisIndex: 0,
+                        xAxisIndex: 0 
+                    },
+                    {
+                        xAxis: Math.floor(end*256),
+                        yAxisIndex: 0,
+                        xAxisIndex: 0 
+                    }
+                ]
+            );
+
+            console.log("OPTIONS")
+            console.log(option)
+            this.chart.setOption(option)
+
+            this.chart.dispatchAction({
+                type: 'takeGlobalCursor',
+                key: 'brush',
+                brushOption: {
+                    title: { lineX: 'Brush' },
+                    show: false // Hide the brush tool button
+                }
+            });
+
+            this.chart.dispatchAction({
+                type: 'brush',
+                command: 'clear',
+                areas: []
+            });
         },
         async transformBrushToMarkArea(){
             console.log("coords: ", this.coords)
@@ -291,7 +454,6 @@
             this.$nextTick(() => {
                 setTimeout(() => {
                 this.initializeMRChart();
-                this.initializeECGChart();
                 }, 100); // 100 ms delay to ensure DOM is fully rendered
             });
             } catch (error) {
@@ -312,8 +474,11 @@
 
             // Define chart options
             const option = {
-                title: {
-                    text: '1022102cFnorm: MR 5 min resampled to 256 Hz'
+                legend: {
+                    data: ['MR', 'ECG Rate'],
+                    right: 10,
+                    top: 60,
+                    orient: 'vertical'
                 },
                 tooltip: {
                     trigger: 'axis',
@@ -334,8 +499,8 @@
                         return obj;
                     },
                     formatter: function (params) {
-                        console.log(params.seriesIndex)
                         if (params !== undefined) {  
+                            params.sort((a, b) => a.seriesIndex - b.seriesIndex);
                             let title = "" 
                             let startEvent = null
                             let endEvent = null
@@ -356,6 +521,7 @@
                                 }
                             }
 
+
                             //const seriesName = params[0].seriesName || '';
 
                             // Format the value to 2 decimal places
@@ -363,15 +529,23 @@
 
                             // Return the tooltip HTML
                             return `
-                                ${title ? `<strong>${title}</strong><br>Start: ${(startEvent/256).toFixed(2)} s, End: ${(endEvent/256).toFixed(2)} s<br>Duration: ${(endEvent/256-startEvent/256).toFixed(2)} s<br><hr>` : ''}
-                                ${params[0].marker}  MR : ${formattedValue} mV<br>
+                                ${title ? `<strong>${title}</strong><br>Start: ${(startEvent/256).toFixed(2)} s, End: ${(endEvent/256).toFixed(2)} s<br>Duration: ${(endEvent/256-startEvent/256).toFixed(2)} s<br>Fmean: 500 Hz<br>Fmedian: 400 Hz<hr>` : ''}
+                                ${params[0].marker}  <b>MR</b> : ${formattedValue} mV<br>
+                                <hr>
+                                ${params[1].marker} <b>ECG</b> : ${params[1].value.toFixed(2)} bpm<br>
+                                LF/HF (5 min): 0.33<br>
+                                Mean (5 min)<br>
+                                SD (5 min): 5<br>
+                                SD (Sleep cycle 2 (90 min)): 6<br>
+                                ${title ? `SD (5 s before & after event): 7<br>SD (during event): 3` : ''}
+                                <hr>
                                 t: ${(xPoint/256).toFixed(2)} s<br>
+                                Sampling Rate: 256 Hz<br>
                                 Sleep cycle: 2<br>
-                                LF/HF: 0.33
-                                SDNN: 5<br>
                             `;
 
                         }
+                            
                     }
                 },
                 axisPointer: {
@@ -386,17 +560,16 @@
                 },
                 toolbox: {
                         feature: {
-
-                        dataZoom: {
-                            yAxisIndex: false
-                        },
-                        
-                        brush: {
-                            type: ['lineX', 'clear'], 
-                            title: {
-                                lineX: 'Add event'
+                            dataZoom: {
+                                yAxisIndex: false
+                            },
+                            
+                            brush: {
+                                type: ['lineX', 'clear'], 
+                                title: {
+                                    lineX: 'Add event'
+                                }
                             }
-                        }
                         }
                 },
                     brush: {
@@ -406,10 +579,23 @@
                         colorAlpha: 0.1
                         }
                     },
+                    dataZoom: [
+                        /*
+                        {
+                            type: 'slider',
+                            xAxisIndex: [0, 1, 2], // Link both x-axes
+                        },
+                        */
+                        {
+                            type: 'inside',
+                            xAxisIndex: [0, 1, 2], // Link both x-axes
+                            zoomOnMouseWheel: false,
+                        }
+                    ],
                     
                     grid: [
-                    { left: '10%', right: '10%', top: '5%', height: '25%' },  // MR
-                    { left: '10%', right: '10%', top: '38%', height: '18%' }, // ecg
+                    { left: '10%', right: '10%', top: '5%', height: '50%' },  // MR
+                    { left: '10%', right: '10%', top: '68%', height: '18%' }, // ecg
                 ],
                 xAxis: [{
                     gridIndex: 0,
@@ -442,13 +628,26 @@
                 },  {
                     gridIndex: 1,
                     type: 'value',
-                    name: 'bpm',
+                    name: 'Beats per minute (bpm)',
                     scale: true,
                     splitArea: {
                         show: true
                     },
-                }],
+                    min: 0
+                    
+                }, {
+                    gridIndex: 1,
+                    type: 'value',
+                    name: 'HRV Metrics',
+                    scale: true,
+                    splitArea: {
+                        show: true
+                    },
+                    min:0
+            }],
+
                 series: [{
+                    name: 'MR',
                     data: this.MR,
                     type: 'line',
                     xAxisIndex: 0,
@@ -490,6 +689,7 @@
                     }
                 }, 
                 {
+                        name: "ECG Rate",
                         data: this.ECG,
                         type: 'line',
                         xAxisIndex: 1,
@@ -504,7 +704,7 @@
                             data: [
                             [
                                 {
-                                name: 'Event 1',
+                                name: '',
                                 xAxis: 37.27*256
                                 },
                                 {
@@ -514,6 +714,50 @@
                             
                             ]
                         },
+                }, {
+                        name: "HRV",
+                        data: Array.from({ length: 100 }, (v, i) => i),
+                        type: 'line',
+                        xAxisIndex: 1,
+                        yAxisIndex: 2,
+                        showPointer: false,
+                        showSymbol: false,
+                        smooth: true,
+                        lineStyle: {color: '#008000'},
+                        markLine: {
+                            data: [
+                                {
+                                    //type: 'average',
+                                    name: 'LF/HF',
+                                    yAxis: (1.46168046835356).toFixed(2),
+                                    lineStyle: {
+                                        color: 'blue',
+                                        type: 'dashed',
+                                        width: 2,
+                                    },
+                                    label: {
+                                        position: 'middle'
+                                    }
+                                },
+                                {
+                                    yAxis: (76.5601888310285).toFixed(2),
+                                    name: 'SD',
+                                    lineStyle: {
+                                        color: 'orange',
+                                        type: 'dashed',
+                                        width: 2,
+                                    },
+                                    label: {
+                                        position: 'middle',
+                                        distance:0
+                                    }
+                                },
+                            ],
+                            label: {
+                                formatter: '{b}: {c}'
+                            }
+                        },
+                        
                     }],
             };
     
@@ -530,6 +774,17 @@
                         brushMode: 'single'
                     }
                 });
+            });
+
+            document.getElementById('zoom-button').addEventListener('click', () => {
+                chart.dispatchAction({
+                    type: 'takeGlobalCursor',
+                    key: 'dataZoom',
+                });
+            });
+
+            chart.on('dataZoom', (params) => {
+                console.log('DataZoom triggered', params);
             });
 
             // Update the markLine position
@@ -610,156 +865,35 @@
                 }
             });
 
+
             } catch (error) {
                 console.error('Error initializing chart:', error);
             }
         },
-
-        initializeECGChart(){
-            const chartElement = document.getElementById('ecgChart');
-            if (!chartElement) {
-                throw new Error('Chart container not found');
-            }
-            console.log('Chart container dimensions:', chartElement.getBoundingClientRect());
-            const chart = echarts.init(chartElement);
-
-            
-            // Define chart options
-            const option = {
-                legend: {
-                    data: ['ECG']
-                },
-                /*
-                tooltip: {
-                    trigger: 'axis',
-                    axisPointer: {
-                        type: 'cross'
-                    },
-                    borderWidth: 1,
-                    borderColor: '#ccc',
-                    padding: 10,
-                    textStyle: {
-                    color: '#000'
-                    },
-                    position: function (pos, params, el, elRect, size) {
-                        const obj = {
-                            top: 10
-                        };
-                        obj[['left', 'right'][+(pos[0] < size.viewSize[0] / 2)]] = 30;
-                        return obj;
-                    },
-                    formatter: function (params) {
-
-                        if (params !== undefined) {  
-                            let title = "" 
-                            let startEvent = null
-                            let endEvent = null
-                            //console.log("PARAMS: ", params)
-                            let xPoint = params[0].dataIndex;
-                            let yPoint = params[0].value;
-
-                            //console.log(xPoint, yPoint)
-
-                            for (const i in events) {
-                                //console.log(events[i])
-                                if (events[i]['start'] <= xPoint && events[i]['end'] >= xPoint){
-                                    title = "Event " + parseInt(i+1)
-                                    console.log("dentro")
-
-                                    startEvent = events[i]['start']
-                                    endEvent = events[i]['end']
-                                }
-                            }
-
-                            //const seriesName = params[0].seriesName || '';
-
-                            // Format the value to 2 decimal places
-                            const formattedValue = yPoint.toFixed(2);
-
-                            // Return the tooltip HTML
-                            return `
-                                ${title ? `<strong>${title}</strong><br>Start: ${(startEvent/256).toFixed(2)} s, End: ${(endEvent/256).toFixed(2)} s<br>Duration: ${(endEvent/256-startEvent/256).toFixed(2)} s<br><hr>` : ''}
-                                ${params[0].marker}  MR : ${formattedValue} mV<br>
-                                t: ${(xPoint/256).toFixed(2)} s<br>
-                                Sleep cycle: 2<br>
-                                LF/HF: 0.33
-                                SDNN: 5<br>
-                            `;
-
-                        }
-                    }
-                },
-                */
-                axisPointer: {
-                        link: [
-                        {
-                            xAxisIndex: 'all'
-                        }
-                        ],
-                        label: {
-                        backgroundColor: '#777'
-                        }
-                },
-                /*
-                    grid: [
-                        {
-                        left: '10%',
-                        right: '7%',
-                        height: '50%',
-                        width: '80%'
-                        }
-                ],*/
-                xAxis: {
-                type: 'category',
-                name: 'Time (s)',
-                data: this.timeAxis,
-                axisLabel: {
-                    formatter: '{value}s',
-                    interval: 25*256
-                },
-                },
-                yAxis: {
-                    type: 'value',
-                    name: 'bpm',
-                    scale: true,
-                    splitArea: {
-                        show: true
-                    }
-                },
-                series: [
-                    {
-                        data: this.ECG,
-                        type: 'line',
-                        showSymbol: false,
-                        smooth: true,
-                        lineStyle: {color: '#008000'},
-                        markArea: {
-                            itemStyle: {
-                                color: '#d0aee5'
-                            },
-                            data: [
-                            [
-                                {
-                                name: 'Event 1',
-                                xAxis: 37.27*256
-                                },
-                                {
-                                xAxis: 40*256
-                                }
-                            ]
-                            
-                            ]
-                        },
-                    }
-             ],
-            };
-    
-            chart.setOption(option);
-            
-        },
         toggleImage() {
             this.isImageVisible = !this.isImageVisible; // Toggle the visibility
         },
+        clickButton() {
+            this.selectionActive = !this.selectionActive;
+
+            if(this.selectionActive){
+                this.buttonType = "primary"
+                this.zoomDisabled = true
+            } else {
+                this.buttonType = ""
+                this.zoomDisabled = false
+            }
+        },
+        triggerSelectionDialog(){
+            this.showSelectionDialog = !this.showSelectionDialog;
+        },
+        async submitForm(){
+            await this.markEvent(this.eventForm.start, this.eventForm.end)
+        },
+        updateSelectionValues(){
+            this.eventForm.start = this.startSelection;
+            this.eventForm.end = this.endSelection;
+        }
     }
 
   }
