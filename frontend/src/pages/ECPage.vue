@@ -164,7 +164,8 @@
   import * as echarts from 'echarts';
   import csv from '../assets/1022102cFnorm_rms_5_min_256Hz.csv'; // Adjust the path as needed
   import { PriceTag, Refresh, InfoFilled } from '@element-plus/icons-vue'
-  import img from '../../../backend/src/data/p1_wk1/1022102.png'
+  //import img from '../../../backend/src/data/p1_wk1/1022102.png'
+  import img from '../assets/NightOverview.png'
   import { reactive } from 'vue'
   import PipelineStepper from '../components/PipelineStepper.vue'
   
@@ -226,6 +227,55 @@
         },
         updateChartArea() {
             if (this.chart) {
+
+                const option = this.chart.getOption();
+                if (!option.series || option.series.length === 0) {
+                    console.error('No series found in chart options');
+                    return;
+                }
+                // Initialize markArea if not present
+                option.series[0].markArea = option.series[0].markArea || { data: [] };
+
+                // Add new markArea
+                option.series[0].markArea.data[0] =
+                    [
+                        {
+                            name: 'Event ' + this.amountEvents,
+                            xAxis: Math.floor(this.num1*256),
+                            yAxisIndex: 0,
+                            xAxisIndex: 0 
+                        },
+                        {
+                            xAxis: Math.floor(this.num2*256),
+                            yAxisIndex: 0,
+                            xAxisIndex: 0 
+                        }
+                    ]
+                
+
+                // Initialize markArea if not present
+                option.series[1].markArea = option.series[1].markArea || { data: [] };
+
+                // Add new markArea
+                option.series[1].markArea.data[0] =
+                    [
+                        {
+                            name: '',
+                            xAxis: Math.floor(this.num1*256),
+                            yAxisIndex: 0,
+                            xAxisIndex: 0 
+                        },
+                        {
+                            xAxis: Math.floor(this.num2*256),
+                            yAxisIndex: 0,
+                            xAxisIndex: 0 
+                        }
+                    ]
+
+                console.log("OPTIONS")
+                console.log(option)
+                this.chart.setOption(option)
+
                 this.chart.setOption({
                     series: [{
                         markArea: {
@@ -301,6 +351,26 @@
                 ]
             );
 
+            // Initialize markArea if not present
+            option.series[1].markArea = option.series[1].markArea || { data: [] };
+
+            // Add new markArea
+            option.series[1].markArea.data.push(
+                [
+                    {
+                        name: '',
+                        xAxis: Math.floor(start*256),
+                        yAxisIndex: 0,
+                        xAxisIndex: 0 
+                    },
+                    {
+                        xAxis: Math.floor(end*256),
+                        yAxisIndex: 0,
+                        xAxisIndex: 0 
+                    }
+                ]
+            );
+
             console.log("OPTIONS")
             console.log(option)
             this.chart.setOption(option)
@@ -338,6 +408,26 @@
                     [
                         {
                             name: 'Event ' + this.amountEvents,
+                            xAxis: this.coords[0],
+                            yAxisIndex: 0,
+                            xAxisIndex: 0 
+                        },
+                        {
+                            xAxis: this.coords[1],
+                            yAxisIndex: 0,
+                            xAxisIndex: 0 
+                        }
+                    ]
+                );
+
+                // Initialize markArea if not present
+                option.series[1].markArea = option.series[1].markArea || { data: [] };
+
+                // Add new markArea
+                option.series[1].markArea.data.push(
+                    [
+                        {
+                            name: '',
                             xAxis: this.coords[0],
                             yAxisIndex: 0,
                             xAxisIndex: 0 
@@ -580,12 +670,10 @@
                         }
                     },
                     dataZoom: [
-                        /*
                         {
                             type: 'slider',
                             xAxisIndex: [0, 1, 2], // Link both x-axes
                         },
-                        */
                         {
                             type: 'inside',
                             xAxisIndex: [0, 1, 2], // Link both x-axes
@@ -657,7 +745,9 @@
                     //lineStyle: {color: '#0000FF'},
                     markArea: {
                         itemStyle: {
-                            color: '#d0aee5'
+                            color: '#d0aee5',
+                            borderColor: '#a942e9',  // Border color of the mark area
+                            borderWidth: 2,  // Border width
                         },
                         data: [
                         [
@@ -699,7 +789,9 @@
                         lineStyle: {color: '#008000'},
                         markArea: {
                             itemStyle: {
-                                color: '#d0aee5'
+                                color: '#d0aee5',
+                                borderColor: '#a942e9',  // Border color of the mark area
+                                borderWidth: 2,  // Border width
                             },
                             data: [
                             [
