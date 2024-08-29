@@ -1,6 +1,6 @@
 ## Installation
 ### Backend
-- Inside back-enfd folder: ``python -m venv .venv``
+- Inside back-end folder: ``python -m venv .venv``
 - macOS: ``source .venv/bin/activate``
 - Windows: ``.venv\Scripts\activate``
 - ``pip install Flask Flask-Cors``
