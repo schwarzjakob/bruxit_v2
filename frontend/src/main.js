@@ -16,6 +16,7 @@ import MonitoringPage from './pages/MonitoringPage.vue'
 import D3Example from './pages/D3Example.vue'
 import DemoPage from './pages/DemoPage.vue'
 import ECPage from './pages/ECPage.vue';
+import ECPage2 from './pages/ECPage2.vue';
 
 
 
@@ -52,6 +53,10 @@ const router = VueRouter.createRouter({
     {
         path: '/ec',
         component: ECPage
+    },
+    {
+        path: '/ec2',
+        component: ECPage2
     },] 
  })
 

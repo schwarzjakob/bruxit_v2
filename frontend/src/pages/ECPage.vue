@@ -28,7 +28,7 @@
                 <h2>Events predicted</h2>
 
                 <p><u>Cycle 2</u></p>
-                <el-card class="text item" v-for="i in parseInt(amountEvents)" :key="i" :style="amountEvents === 2 ? specialStyle: ''">
+                <el-card class="text item" v-for="i in parseInt(amountEvents)" :key="i" :style="amountEvents === 2 ? specialStyle: basicStyle">
                     <p v-if="edited"><i>Edited</i></p>
                     <div>
                     <el-button type="primary" round @click="zoomToEvent" style="margin-bottom: 10px; margin-right: 200px;"><el-tooltip content="Click to zoom" placement="top">Event {{ i }}</el-tooltip></el-button>
@@ -206,7 +206,13 @@
                         }),
             specialStyle: {
                 marginBottom: "10px",
-                borderColor: "#409EFF"
+                borderColor: "#409EFF",
+                borderWidth: "2px"
+            },
+            basicStyle: {
+                marginBottom: "10px",
+                borderColor: "#409EFF",
+                borderWidth: "2px"
             }
         }
     },
@@ -297,6 +303,7 @@
         },
         zoomToEvent(){
             if (this.chart) {
+                this.basicStyle = {}
                 this.chart.dispatchAction({
                     type: 'dataZoom',
                     startValue: (this.num1 * 256) - (5*256),
