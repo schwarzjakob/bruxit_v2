@@ -13,7 +13,12 @@ const vuexLocal = new VuexPersistence({
 const store = createStore({
   state () {
     return {
-      patientId: 1,
+      patientId: 0,
+      weekId: '',
+      file: '',
+      fileSize: 0.0,
+      userType: '',
+      settingsSaved: false
     }
   },
   mutations: {
@@ -22,6 +27,24 @@ const store = createStore({
       state.highlightRange = range;
     },
     */
+    setUserType(state, userType) {
+      state.userType = userType;
+    },
+    setSettingsSaved(state, settingsSaved){
+      state.settingsSaved= settingsSaved;
+    },
+    setPatientId(state, patientId){
+      state.patientId = patientId;
+    },
+    setWeekId(state, weekId){
+      state.weekId = weekId;
+    },
+    setFile(state, file){
+      state.file = file;
+    },
+    setFileSize(state, fileSize){
+      state.fileSize = fileSize;
+    }
   },
   plugins: [vuexLocal.plugin],
 
