@@ -4,6 +4,7 @@
 - macOS: ``source .venv/bin/activate``
 - Windows: ``.venv\Scripts\activate``
 - ``pip install Flask Flask-Cors``
+- Define location of flask app (Windows): ``set FLASK_APP=run.py``, ``$env:FLASK_APP = "run.py"``, ``flask run``
 - Initialize database: ``flask db init``
 - Migrate database: ``flask db migrate``
 - Upgrade database: ``flask db upgrade``
