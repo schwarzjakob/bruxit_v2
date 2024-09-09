@@ -18,5 +18,7 @@ build/
 
 # data folder
 data/
-
+data_resampled/
+data_brazil
+brazil_data.ipynb
 src/settings.py
