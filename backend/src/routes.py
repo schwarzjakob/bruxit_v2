@@ -1,10 +1,12 @@
-from flask import Blueprint, render_template
-from .models import Patient, PatientData, db
+from flask import Blueprint, request
+from .models import Patient, NightDuration, SSD, db
 from .utils import *
+from .ssd import *
 import psycopg2
 from psycopg2.extras import execute_values
 import time, io
 from sqlalchemy import create_engine
+import time
 
 
 main = Blueprint('main', __name__)
@@ -18,6 +20,53 @@ def get_patient_data():
     sorted_result = sort_data_structure(result)
 
     return sorted_result, 200
+
+@main.route('/ssd/<int:patient_id>/<string:week>/<string:filename>', methods=['GET'])
+def get_ssd(patient_id, week, filename):
+    
+    results = SSD.query.filter_by(patient_id=patient_id, week=week, file=filename).all()
+    if results:
+        ssd = [{'HRV_LFHF': result.HRV_LFHF, 'HRV_SDNN': result.HRV_SDNN, 'x': result.x, 'y': result.y, 'stage': result.stage, 'selected': result.selected} for result in results]
+    else:
+        start_time = time.time()
+        ssd = return_HRV_analysis(patient_id, week, filename)
+        end_time = time.time()
+        print(f"The loading time for the request is {end_time-start_time} seconds.")
+
+    return ssd, 200
+
+
+@main.route('/selected-intervals/<int:patient_id>/<string:week>/<string:filename>', methods=['POST'])
+def selected_intervals(patient_id, week, filename):
+    """
+    payload:
+        {
+            'x': int,
+            'y': int,
+
+        }
+    """
+    selected_intervals = request.json
+
+    # The condition - update all users with the name 'John'
+    SSD_to_update = SSD.query.filter_by(patient_id=patient_id, week=week, file=filename)
+    
+    # Update the 'active' column to False for all these users
+    SSD_to_update.update({'selected': False})
+    
+
+    for selected_interval in selected_intervals:
+        update_row = SSD.query.filter_by(patient_id=patient_id, week=week, file=filename, x=selected_interval['x'], y=selected_interval['y'])
+        update_row.update({'selected': True})
+
+    # Commit the transaction
+    db.session.commit()
+
+    return "Selected intervals updated.", 200
+
+
+
+
 
 
 @main.route('/get-emg',  methods=['GET'])

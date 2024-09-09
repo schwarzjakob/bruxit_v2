@@ -5,6 +5,8 @@ import numpy as np
 import os
 import re
 from collections import defaultdict
+import datetime
+from .models import NightDuration, db
 
 data_path = 'C:/Users/eleon/Desktop/SDAP/backend/src/data/'
 
@@ -58,8 +60,10 @@ def get_interval_from_csv(data, interval_index, sampling_rate=2000, interval_dur
 
     return interval_data
 
+
 def rectify_signal(signal):
     return np.abs(signal)
+
 
 def rms(emg_signal, sampling=2000, window=0.06, min_periods=1):
     # Define a window size (in number of samples)
@@ -96,6 +100,7 @@ def find_mvc(signal_rms, loc):
 
         return signal_mvc
     
+
 def downsample_data(signal, desired_sampling, original_sampling=2000, method="interpolation"):
     return nk.signal_resample(signal, sampling_rate=original_sampling, desired_sampling_rate=desired_sampling, method=method)
 
@@ -152,6 +157,15 @@ def sort_data_structure(data_dict):
     return sorted_dict
 
 
+def calculate_night_duration(patient_id, week, file_name, file_length, sampling_rate):
+    seconds = file_length / sampling_rate
+    duration = datetime.timedelta(seconds = seconds)
+
+    # TODO: insert duration in DB
+    night_duration = NightDuration(patient_id=patient_id, week=week, file=file_name, seconds=seconds, duration=duration)
+
+    db.session.add(night_duration)
+    db.session.commit()
 
 
 
