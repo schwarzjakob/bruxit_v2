@@ -17,6 +17,7 @@ import D3Example from './pages/D3Example.vue'
 import DemoPage from './pages/DemoPage.vue'
 import ECPage from './pages/ECPage.vue';
 import ECPage2 from './pages/ECPage2.vue';
+import EventsClassificationDef from './pages/EventsClassificationDef.vue';
 
 
 
@@ -57,6 +58,9 @@ const router = VueRouter.createRouter({
     {
         path: '/ec2',
         component: ECPage2
+    },{
+        path: 'ec-def',
+        component: EventsClassificationDef
     },] 
  })
 
