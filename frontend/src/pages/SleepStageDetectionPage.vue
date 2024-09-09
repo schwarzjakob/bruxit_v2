@@ -11,6 +11,12 @@
             </router-link>
         </el-col>
     </el-row>
+    <el-row justify="center" style="margin-bottom: 100px">
+        <el-col :span="10">
+            <PipelineStepper :step="1" />
+        </el-col>
+    </el-row>
+    
 <el-row justify="center"><h1>Sleep stage Detection Page</h1></el-row>
 <el-row justify="center"> <h3>Patient {{ this.$store.state.patientId }}, Week {{ this.$store.state.weekId }}, file {{ this.$store.state.file }}, size {{ this.$store.state.fileSize }} GB</h3></el-row>
 
