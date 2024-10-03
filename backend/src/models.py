@@ -40,6 +40,7 @@ class NightDuration(db.Model):
     file = db.Column(db.String(50), unique=True, nullable=False)
     seconds = db.Column(db.Float, nullable=False)
     duration = db.Column(db.Interval, nullable = False)
+    #last_index = db.Column(db.Integer, nullable=False)
 
     def __repr__(self):
         return f'<Patient {self.patient_id}>: week {self.week}, file: {self.file}, seconds: {self.seconds}, duration: {self.duration}'
@@ -59,6 +60,64 @@ class SSD(db.Model):
     selected = db.Column(db.Boolean, unique=False, default=False)
 
 
+class MVC(db.Model):
+    __tablename__ = 'mvc'
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, nullable=False)
+    week = db.Column(db.String(50), nullable=False)
+    file = db.Column(db.String(50), nullable=False)
+    sensor = db.Column(db.String(50), nullable=False)
+    mvc = db.Column(db.Float, nullable=False)
 
+"""
+class Feautres(db.Model):
+    __tablename__ = 'features'
+    start_time = db.Column(db.Float, nullable=False)
+    end_time  = db.Column(db.Float, nullable=False)
+    std_mr  = db.Column(db.Float, nullable=True)
+    std_ml = db.Column(db.Float, nullable=True)
+    var_mr  = db.Column(db.Float, nullable=True)
+    var_ml  = db.Column(db.Float, nullable=True)
+    rms_mr  = db.Column(db.Float, nullable=True)
+    rms_ml = db.Column(db.Float, nullable=True)
+    mav_mr = db.Column(db.Float, nullable=True)
+    mav_ml = db.Column(db.Float, nullable=True)
+    log_det_mr = db.Column(db.Float, nullable=True)
+    log_det_ml = db.Column(db.Float, nullable=True)
+    wl_mr = db.Column(db.Float, nullable=True)
+    wl_ml = db.Column(db.Float, nullable=True)
+    aac_mr = db.Column(db.Float, nullable=True)
+    aac_ml  = db.Column(db.Float, nullable=True)
+    dasdv_mr = db.Column(db.Float, nullable=True)
+    dasdv_ml = db.Column(db.Float, nullable=True)
+    zc_mr = db.Column(db.Float, nullable=True)
+    zc_ml = db.Column(db.Float, nullable=True)
+    wamp_mr = db.Column(db.Float, nullable=True)
+    wamp_ml = db.Column(db.Float, nullable=True)
+    fr_mr = db.Column(db.Float, nullable=True)
+    fr_ml = db.Column(db.Float, nullable=True)
+    mnp_mr = db.Column(db.Float, nullable=True) 
+    mnp_ml = db.Column(db.Float, nullable=True)
+    tot_mr = db.Column(db.Float, nullable=True)
+    tot_ml = db.Column(db.Float, nullable=True)
+    mnf_mr = db.Column(db.Float, nullable=True)
+    mnf_ml = db.Column(db.Float, nullable=True)
+    mdf_mr = db.Column(db.Float, nullable=True)
+    mdf_ml = db.Column(db.Float, nullable=True)
+    pkf_mr = db.Column(db.Float, nullable=True)
+    pkf_ml = db.Column(db.Float, nullable=True)
+    HRV_mean = db.Column(db.Float, nullable=True)
+    HRV_median = db.Column(db.Float, nullable=True) 
+    HRV_sdnn = db.Column(db.Float, nullable=True)
+    HRV_min = db.Column(db.Float, nullable=True)
+    HRV_max = db.Column(db.Float, nullable=True)
+    HRV_vlf = db.Column(db.Float, nullable=True)
+    HRV_vhf = db.Column(db.Float, nullable=True)
+    HRV_lf = db.Column(db.Float, nullable=True)
+    HRV_hf = db.Column(db.Float, nullable=True)
+    HRV_lf_hf = db.Column(db.Float, nullable=True)
+
+
+"""
 
     

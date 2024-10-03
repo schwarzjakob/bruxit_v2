@@ -23,16 +23,16 @@ def add_matrix_coordinates(df, x_max=18):
     return df
 
 
-def compute_HRV_metrics(peaks):
+def compute_HRV_metrics(peaks, sampling_rate):
     duration_peaks = peaks[len(peaks)-1]
-    divider = duration_peaks/2000/60/5
+    divider = duration_peaks/sampling_rate/60/5
     segment = np.array_split(peaks, math.ceil(divider))
 
     hrv_segment_df=pd.DataFrame()
 
     for i in range(len(segment)):
         #print(i)
-        hrv_segment=nk.hrv(segment[i],sampling_rate=2000, show=False)
+        hrv_segment=nk.hrv(segment[i],sampling_rate=sampling_rate, show=False)
         hrv_segment_df = pd.concat([hrv_segment_df,hrv_segment],ignore_index=True)
 
     return hrv_segment_df
@@ -54,11 +54,19 @@ def get_ako_ranges():
 
 # TODO: talk with Gabi, Vera, Barbara about this
 def categorize_sleep_stage(value):
-    lower, upper = get_ako_ranges()['rem']['min'], get_ako_ranges()['rem']['max']
-    if lower <= value <= upper:
-        return "rem"
-    else:
-        return "nrem"
+    lower_rem, upper_rem = get_ako_ranges()['rem']['min'], get_ako_ranges()['rem']['max']
+    lower_nrem, upper_nrem = get_ako_ranges()['nrem']['min'], get_ako_ranges()['nrem']['max']
+    stage = ""
+    if lower_nrem <= value <= upper_nrem:
+        stage= "nrem"
+    
+    if lower_rem <= value <= upper_rem:
+        stage = "rem"
+    
+    if (not lower_nrem <= value <= upper_nrem) and (not lower_rem <= value <= upper_rem):
+        stage = "rem"
+
+    return stage
 
 def find_selected_tiles(value):
     if value == 'rem':
@@ -69,41 +77,41 @@ def find_selected_tiles(value):
 
 
 
-def return_HRV_analysis(patient_id, week_id, filename):
+def return_HRV_analysis(patient_id, week_id, filename, sampling_rate):
     file_path = base_dir + f"/p{patient_id}_wk{week_id}/{filename}"
     ecg = pl.read_csv(file_path, columns=['ECG'])
 
     # Insert duration info in the database
-    calculate_night_duration(patient_id, week_id, filename, len(ecg), sampling_rate=2000)
+    #calculate_night_duration(patient_id, week_id, filename, len(ecg), sampling_rate=sampling_rate)
 
-    ecg_clean = nk.ecg_clean(ecg, sampling_rate=2000)
-    ecg_peaks = nk.ecg_findpeaks(ecg_clean, sampling_rate=2000)
-    info, r_peaks_corrected = nk.signal_fixpeaks(ecg_peaks, sampling_rate=2000, iterative=False, show=False, method="Kubios")
+    ecg_clean = nk.ecg_clean(ecg, sampling_rate=sampling_rate)
+    ecg_peaks = nk.ecg_findpeaks(ecg_clean, sampling_rate=sampling_rate)
+    info, r_peaks_corrected = nk.signal_fixpeaks(ecg_peaks, sampling_rate=sampling_rate, iterative=False, show=False, method="Kubios")
 
 
     # Save RR intervals to plot in events classification page 
     # TODO: put in external function
 
     # Calculate RR intervals
-    rr_intervals = np.diff(r_peaks_corrected) / 2000
+    rr_intervals = np.diff(r_peaks_corrected) / sampling_rate * 1000
 
     # Insert fake data point
     rr_intervals_adjusted = np.insert(rr_intervals, 0, rr_intervals[0])
 
     # Calculate time axis
-    time_r_peaks = r_peaks_corrected[1:] / 2000  # Time corresponding to the RR intervals
+    time_r_peaks = r_peaks_corrected[1:] / sampling_rate  # Time corresponding to the RR intervals
     time_r_peaks_adjusted = np.insert(time_r_peaks, 0, time_r_peaks[0] - rr_intervals[0])  # Add a time point for the fake interval
 
     rri_adj_df = pd.DataFrame(data={'RRI': rr_intervals_adjusted, 'RRI_t': time_r_peaks_adjusted})
 
-    path = f"C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled/p{patient_id}/wk{week_id}"
+    path = f"C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled/p{patient_id}_wk{week_id}"
     if not os.path.exists(path):
         os.makedirs(path)
 
     rri_adj_df.to_csv(path + f"/{filename}_rri_256Hz.csv")
 
     # Calculate HRV metrics
-    hrv = compute_HRV_metrics(r_peaks_corrected)
+    hrv = compute_HRV_metrics(r_peaks_corrected, sampling_rate)
 
     hrv_cut = hrv[['HRV_LFHF','HRV_SDNN']]
 
