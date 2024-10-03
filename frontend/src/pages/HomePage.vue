@@ -19,7 +19,9 @@
     </el-dialog>
 
 
-
+    <el-row justify="center">
+        <h3>Please select a user type:</h3>
+    </el-row>
     <!--USER AVATARS-->
     <el-row justify="center">
         <div>

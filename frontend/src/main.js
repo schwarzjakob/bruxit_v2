@@ -59,7 +59,7 @@ const router = VueRouter.createRouter({
         path: '/ec2',
         component: ECPage2
     },{
-        path: 'ec-def',
+        path: '/ec-def',
         component: EventsClassificationDef
     },] 
  })

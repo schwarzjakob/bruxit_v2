@@ -6,9 +6,6 @@
             </el-tag>
         </el-col>
     </el-row>
-    <el-row justify="center">
-        <h1>Patient Data</h1>
-    </el-row>
 
     <el-row justify="center" style="margin-bottom: 100px">
         <el-col :span="10">
@@ -22,7 +19,7 @@
 
     <el-row justify="center">
         <el-col :span="12">
-            <el-collapse v-model="activePanels">
+            <el-collapse v-model="activePanels" v-loading="loading" element-loading-text="Downsampling dataset...">
                 <el-collapse-item v-for="(weeks, patientId) in patientsData" :key="patientId">
                     <template #title>
                         <el-tag size="large">
@@ -78,7 +75,8 @@ export default{
             activePanels: [],
             selectedFile: ref(''),
             patientsData: {},
-            userTypeTagType: ""
+            userTypeTagType: "",
+            loading: false
         }
     },
     async mounted(){
@@ -113,14 +111,32 @@ export default{
                     console.log(err)
                 })
         },
-        storeSelectedPatientFile(patientId, weekId, file_name, file_size){
+        async downsampleSelectedPatientData(patientId, weekId, file_name){
+            this.loading = true;
+            const path = `http://127.0.0.1:5000/downsample-data/${patientId}/${weekId}/${file_name}`
+            const headers = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            };
+
+            await axios.get(path, {headers})
+                .then(() => {
+                    this.loading = false;
+
+                })
+                .catch(err=>{
+                    console.log(err)
+                })
+        },
+        async storeSelectedPatientFile(patientId, weekId, file_name, file_size){
             console.log("Patient " + patientId + ",week " + weekId + ", file_name: " + file_name + " size_gb: " + file_size )
             console.log(this.selectedFile)
             this.$store.commit('setPatientId', patientId);
             this.$store.commit('setWeekId', String(weekId));
             this.$store.commit('setFile', String(file_name));
             this.$store.commit('setFileSize', parseFloat(file_size))
-            this.$router.push('/ssd');
+            await this.downsampleSelectedPatientData(patientId, weekId, file_name)
+            this.$router.push('/ec-def');
         },
         getTooltipContent(file) {
             return `Size: ${file.size_gb} GB`;
