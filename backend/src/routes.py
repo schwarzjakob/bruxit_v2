@@ -1,5 +1,5 @@
 from flask import Blueprint, request, send_from_directory, abort, jsonify
-from .models import Patient, NightDuration, SSD, MVC, Prediction, db
+from .models import Threshold, NightDuration, SSD, MVC, Prediction, db
 from .utils import *
 from .ssd import *
 import psycopg2
@@ -31,10 +31,10 @@ def get_ssd(patient_id, week, filename, sampling_rate):
     
     results = SSD.query.filter_by(patient_id=patient_id, week=week, file=filename).all()
     if results:
-        ssd = [{'HRV_LFHF': result.HRV_LFHF, 'HRV_SDNN': result.HRV_SDNN, 'x': result.x, 'y': result.y, 'stage': result.stage, 'selected': result.selected} for result in results]
+        ssd = [{'HRV_LFHF': result.HRV_LFHF, 'HRV_SDNN': result.HRV_SDNN, 'x': result.x, 'y': result.y, 'stage': result.stage} for result in results]
     else:
         start_time = time.time()
-        ssd = return_HRV_analysis(patient_id, week, filename, sampling_rate)
+        ssd = HRV_analysis(patient_id, week, filename, sampling_rate)
         end_time = time.time()
         print(f"The loading time for the request is {end_time-start_time} seconds.")
 
@@ -68,6 +68,56 @@ def selected_intervals(patient_id, week, filename):
     db.session.commit()
 
     return "Selected intervals updated.", 200
+
+
+@main.route('/patient-threshold/<int:patient_id>/<string:week>/<string:file>', methods=['GET', 'POST'])
+def post_patient_threshold(patient_id, week, file):
+    if request.method == 'GET':
+        threshold_db = Threshold.query.filter_by(patient_id=patient_id, week=week, file=file).all()
+        if threshold_db:
+            result = {}
+            if len(threshold_db) == 2:
+                for tr in threshold_db:
+                    result[tr.sensor] = tr.threshold
+            
+            if len(threshold_db) == 1:
+                if threshold_db[0].sensor == "MR":
+                    result["MR"] = threshold_db[0].threshold
+                    result["ML"] = 10
+                
+                if threshold_db[0].sensor == "ML":
+                    result["ML"] = threshold_db[0].threshold
+                    result["MR"] = 10
+
+        else:
+            result = {'MR': 10, 'ML': 10}
+        
+        return result, 200
+
+    if request.method == 'POST':
+        """
+        payload
+            {
+                'sensor': string,
+                'threshold': int 
+
+            }
+        """
+        threshold = request.json["threshold"]
+        sensor = request.json["sensor"]
+        threshold_db = Threshold.query.filter_by(patient_id=patient_id, week=week, file=file, sensor=sensor).first()
+        if not threshold_db:
+            print("threshold not in db!")
+            threshold_db = Threshold(patient_id=patient_id, week=week, file=file, sensor=sensor, threshold=threshold)
+            db.session.add(threshold_db)
+            db.session.commit()
+
+        else:
+            threshold_db.threshold = threshold
+            db.session.commit()
+
+        return "threshold updated succesffully", 200
+
 
 @main.route('/get-emg/<int:patient_id>/<string:week>/<string:file>/<float:idx>',  methods=['GET'])
 def get_emg(patient_id, week, file, idx):
