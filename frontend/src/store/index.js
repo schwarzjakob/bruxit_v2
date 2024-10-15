@@ -18,7 +18,9 @@ const store = createStore({
       file: '',
       fileSize: 0.0,
       userType: '',
-      settingsSaved: false
+      settingsSaved: false,
+      thresholdMr: 10,
+      thresholdMl: 10
     }
   },
   mutations: {
@@ -44,6 +46,12 @@ const store = createStore({
     },
     setFileSize(state, fileSize){
       state.fileSize = fileSize;
+    },
+    setThresholdMr(state, thresholdMr){
+      state.thresholdMr = thresholdMr;
+    },
+    setThresholdMl(state, thresholdMl){
+      state.thresholdMl = thresholdMl;
     }
   },
   plugins: [vuexLocal.plugin],

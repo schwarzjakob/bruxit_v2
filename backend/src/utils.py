@@ -6,8 +6,13 @@ import os
 import re
 from collections import defaultdict
 import datetime
-from .models import NightDuration, MVC, db
+from .models import NightDuration, MVC, Prediction, db
 import math
+from sklearn.preprocessing import MinMaxScaler
+import matplotlib
+matplotlib.use('Agg')  # Use the non-GUI backend for Matplotlib
+import matplotlib.pyplot as plt
+import shutil
 
 data_path = 'C:/Users/eleon/Desktop/SDAP/backend/src/data/'
 
@@ -23,52 +28,11 @@ def read_loc_csv(p, w, f):
     return loc
 
 
-"""
-def get_interval_from_csv(data, interval_index, sampling_rate=2000, interval_duration=5*60):
-
-    Extracts a specific 5-minute interval from a CSV file containing EMG data using Polars.
-
-    Parameters:
-    - file_path (str): Path to the CSV file.
-    - interval_index (int): Index of the 5-minute interval to retrieve (0-based).
-    - sampling_rate (int): Sampling rate of the data in Hz.
-    - interval_duration (int): Duration of the interval in seconds (default is 5 minutes).
-
-    Returns:
-    - pl.DataFrame: Polars DataFrame containing the data for the specified 5-minute interval.
-
-    # Calculate the number of samples per interval
-    samples_per_interval = sampling_rate * interval_duration
-
-    # Load the data from the CSV file
-    data = data
-    num_samples = len(data)
-
-    # Calculate the number of intervals
-    num_intervals = (num_samples + samples_per_interval - 1) // samples_per_interval  # Ceiling division
-
-    # Print the number of 5-minute intervals
-    print(f"Total number of 5-minute intervals: {num_intervals}")
-
-    # Validate the interval_index
-    if interval_index < 0 or interval_index >= num_intervals:
-        raise ValueError(f"Invalid interval_index. Must be between 0 and {num_intervals - 1}.")
-
-    # Calculate the start and end indices of the requested interval
-    start_index = interval_index * samples_per_interval
-    end_index = min(start_index + samples_per_interval, num_samples)
-
-    # Extract the interval data
-    interval_data = data.slice(start_index, end_index - start_index)
-
-    return interval_data, start_index, end_index
-"""
-
 def rectify_signal(signal):
     return np.abs(signal)
 
 
-def rms(emg_signal, sampling=2000, window=0.06, min_periods=1):
+def rms(emg_signal, sampling=200, window=0.06, min_periods=1):
     # Define a window size (in number of samples)
     # 60-120 ms?
     window_size = int(window*sampling)
@@ -82,7 +46,7 @@ def rms(emg_signal, sampling=2000, window=0.06, min_periods=1):
 
     return signal_rms
 
-def fast_rms(signal, sampling=2000, window=0.06):
+def fast_rms(signal, sampling=200, window=0.06):
     window_size = int(window*sampling)
 
     # Square the signal
@@ -274,6 +238,254 @@ def get_5_min_emg(df, seconds):
 
     return result
 
+def generate_night_images(patient_id, week, file, mr, ml, predictions):
+    # Create output directory for plots
+    output_dir = f"C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv_images/"
+    #os.makedirs(output_dir, exist_ok=True)
+
+
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
+
+    # Whole Night Plot
+    sleep_cycle_step = 1080000 / 200  # Sleep cycle step in seconds
+    sleep_cycles = math.ceil(len(mr) / (200 * 90 * 60))  # Number of sleep cycles
+    plt.figure(figsize=(25, 10))
+    plt.title("Whole Night Signal")
+    time_steps = np.linspace(0, len(mr) / 200, len(mr))
+    
+    plt.plot(time_steps, mr, color="blue", alpha=0.7, label="MR")
+    plt.plot(time_steps, ml, color="red", alpha=0.5, label="ML")
+    plt.axvline(x=0, color="black")
+
+    j = sleep_cycle_step
+    for i in range(sleep_cycles):
+        plt.axvline(x=j, color="black")
+        plt.text(j - 3000, max(mr + ml), f"Cycle {i + 1}")
+        j += sleep_cycle_step
+
+    # Mark events in the whole night plot
+    position_flag = True
+    for event in predictions:
+        start_s = event.start_s
+        end_s = event.end_s
+        label = event.name
+        
+        if event.confirmed == True:
+            # Mark the event area as a shaded rectangle
+            plt.fill_betweenx(
+                y=[min(mr + ml), max(mr + ml)], 
+                x1=start_s, 
+                x2=end_s, 
+                color="green", 
+                alpha=0.2
+            )
+            
+            # Alternate between top and bottom for labels
+            y_pos = max(mr + ml) if position_flag else min(mr + ml)
+            plt.text((start_s + end_s) / 2, y_pos, label, fontsize=12, color="green", 
+                    verticalalignment='top' if position_flag else 'bottom', 
+                    horizontalalignment='center')
+            position_flag = not position_flag
+
+    plt.xlabel("Time [s]")
+    plt.ylabel("Amplitude")
+    plt.legend(loc='upper right')
+
+    plt.subplots_adjust(left=0.05, right=0.95, top=0.9, bottom=0.1)
+
+    plt.savefig(f"{output_dir}/whole_night_signal.png")  # Save the whole night plot
+    plt.close()
+
+    # Sleep Cycle Plots
+    sleep_cycle_duration_s = 90 * 60  # Duration of one sleep cycle in seconds
+    samples_per_cycle = sleep_cycle_duration_s * 200  # Total samples per sleep cycle
+
+    start_x_axis = 0
+    end_x_axis = sleep_cycle_duration_s
+    # Generate individual plots for each sleep cycle
+    for cycle in range(sleep_cycles):
+        start_idx = int(cycle * samples_per_cycle)
+        end_idx = int((cycle + 1) * samples_per_cycle)
+
+        # Ensure the end index does not exceed the length of the signal
+        if end_idx > len(mr):
+            end_idx = len(mr)
+
+        # Time steps for the current sleep cycle should go from 0 to 5400 seconds (90 minutes)
+        time_steps_cycle = np.linspace(start_x_axis, end_x_axis, end_idx - start_idx)
+
+        # Plot for the current sleep cycle
+        plt.figure(figsize=(15, 5))
+        plt.title(f"Sleep Cycle {cycle + 1}")
+        plt.plot(time_steps_cycle, mr[start_idx:end_idx], color="blue", alpha=0.5, label="MR")
+        plt.plot(time_steps_cycle, ml[start_idx:end_idx], color="red", alpha=0.5, label="ML")
+
+        # Mark events in the sleep cycle plot
+        position_flag = True
+        for event in predictions:
+            start_s = event.start_s
+            end_s = event.end_s
+            label = event.name
+            
+            if start_s >= start_x_axis and end_s <= end_x_axis and event.confirmed == True:
+                # Mark the event area as a shaded rectangle
+                plt.fill_betweenx(
+                    y=[min(mr + ml), max(mr + ml)], 
+                    x1=start_s, 
+                    x2=end_s, 
+                    color="green", 
+                    alpha=0.2
+                )
+                
+                # Alternate between top and bottom for labels
+                y_pos = max(mr + ml) if position_flag else min(mr + ml)
+                plt.text((start_s + end_s) / 2, y_pos, label, fontsize=12, color="green", 
+                         verticalalignment='top' if position_flag else 'bottom', 
+                         horizontalalignment='center')
+                position_flag = not position_flag
+
+        plt.xlabel("Time [s]")
+        plt.ylabel("Amplitude")
+        plt.legend(loc='upper right')
+        start_x_axis += sleep_cycle_duration_s
+        end_x_axis += sleep_cycle_duration_s
+
+        plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.15)
+
+        plt.savefig(f"{output_dir}/sleep_cycle_{cycle + 1}.png")  # Save the sleep cycle plot
+        plt.close()
+
+
+def append_features(continuous_features, row, mean=False):
+    if mean:
+        continuous_features['std_mr'].append(row['std_mr'][0])
+        continuous_features['std_ml'].append(row['std_ml'][0])
+        continuous_features['var_mr'].append(row['var_mr'][0])
+        continuous_features['var_ml'].append(row['var_ml'][0])
+        continuous_features['mnf_mr'].append(row['mnf_mr'][0])
+        continuous_features['mnf_ml'].append(row['mnf_ml'][0])
+        continuous_features['mdf_mr'].append(row['mdf_mr'][0])
+        continuous_features['mdf_ml'].append(row['mdf_ml'][0])
+        continuous_features['HRV_mean'].append(row['HRV_mean'][0])
+        continuous_features['HRV_median'].append(row['HRV_median'][0])
+        continuous_features['HRV_sdnn'].append(row['HRV_sdnn'][0])
+        continuous_features['HRV_lf_hf'].append(row['HRV_lf_hf'][0])
+        continuous_features['RRI'].append(row['RRI'][0])
+    else:
+        continuous_features['std_mr'].append(row['std_mr'])
+        continuous_features['std_ml'].append(row['std_ml'])
+        continuous_features['var_mr'].append(row['var_mr'])
+        continuous_features['var_ml'].append(row['var_ml'])
+        continuous_features['mnf_mr'].append(row['mnf_mr'])
+        continuous_features['mnf_ml'].append(row['mnf_ml'])
+        continuous_features['mdf_mr'].append(row['mdf_mr'])
+        continuous_features['mdf_ml'].append(row['mdf_ml'])
+        continuous_features['HRV_mean'].append(row['HRV_mean'])
+        continuous_features['HRV_median'].append(row['HRV_median'])
+        continuous_features['HRV_sdnn'].append(row['HRV_sdnn'])
+        continuous_features['HRV_lf_hf'].append(row['HRV_lf_hf'])
+        continuous_features['RRI'].append(row['RRI'])
+
+
+
+def get_continuous_features(features, idx, data_length=None):
+    start_time = 60*5*idx
+    end_time = start_time + 60*5
+    print(start_time, end_time)
+    #print(features)
+    
+    #filtered = features.filter(
+    #    (pl.col('start_time') >= start_time) & (pl.col('end_time') <= end_time)
+    #)
+    filtered = features.filter(
+        ((pl.col('start_time') >= start_time) | (pl.col('end_time') > start_time)) & ((pl.col('end_time') <= end_time) | (pl.col('start_time') < end_time))
+    ) 
+    #print(filtered)
+    continuous_features = {'std_mr': [], 'std_ml': [], 'var_mr': [], 'var_ml': [], 'mnf_mr': [], 'mnf_ml': [], 'mdf_mr': [], 'mdf_ml': [], 'HRV_mean': [], 'HRV_median': [], 'HRV_sdnn': [], 'HRV_lf_hf': [], 'RRI': []}
+    count = 0
+    if len(filtered) == 0:
+        last_feature_row = features.row(len(features)-1, named=True)
+        for _ in range(data_length):
+            append_features(continuous_features, last_feature_row)
+    
+    else:
+        for row in filtered.rows(named=True):
+            if count == 0 or count==len(filtered)-1:
+                #print("ciao")
+                for i in range(100):
+                    append_features(continuous_features, row)
+
+
+                if count == 0:
+                    next = filtered.row(count+1, named=True)
+                    df_new = pl.DataFrame([row, next])
+                    mean_rows = df_new.mean().to_dict(as_series=False)
+                    for _ in range(100):
+                        append_features(continuous_features, mean_rows, mean=True)
+
+                if count == len(filtered)-1:
+                    print("check if smaller than rms mr: ")
+                    len_last_signal_interval = data_length
+                    len_continuous_feature_list = len(continuous_features['std_mr'])
+                    # If this is the last 5 min intervals is important to make sure that the features length is the same as the data length
+                    if len_last_signal_interval > len_continuous_feature_list:
+                        missing = len_last_signal_interval - len_continuous_feature_list
+                        for _ in range(missing):
+                            append_features(continuous_features, row)
+                    print(data_length)
+                    print(len(continuous_features['std_mr']))
+
+
+
+            else:
+                next = filtered.row(count+1, named=True)
+                df_new = pl.DataFrame([row, next])
+                mean_rows = df_new.mean().to_dict(as_series=False)
+                for _ in range(100):
+                    append_features(continuous_features, mean_rows, mean=True)
+
+            
+            count +=1
+    return continuous_features
+
+
+def get_new_event_metrics(patient_id, week, file, start_s, end_s):
+    print("take features from where the event locates")
+    path = 'C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled'
+    features = pl.read_csv(f"{path}/p{patient_id}_wk{week}/{file[:-4]}200Hz_features.csv")
+
+    features_event = features.filter(
+        ((pl.col('start_time') >= start_s) | (pl.col('end_time') > start_s)) & ((pl.col('end_time') <= end_s) | (pl.col('start_time') < end_s))
+    )
+    print(features_event.mean()[:,3:])
+    features_event_mean = features_event.mean()[:,2:]
+
+    return features_event_mean
+
+def add_new_prediction(patient_id, week, file, start_s, end_s, justification, name, metrics):
+    new_prediction = Prediction(patient_id=patient_id, week=week, file=file, name=name, start_s=start_s, end_s=end_s,
+                                std_mr=metrics['std_mr'].item(), std_ml=metrics['std_ml'].item(), var_mr=metrics['var_mr'].item(),
+                                var_ml=metrics['var_ml'].item(), rms_mr=metrics['rms_mr'].item(), rms_ml=metrics['rms_ml'].item(),
+                                mav_mr=metrics['mav_mr'].item(), mav_ml=metrics['mav_ml'].item(), log_det_mr=metrics['log_det_mr'].item(),
+                                log_det_ml=metrics['log_det_ml'].item(), wl_mr=metrics['wl_mr'].item(), wl_ml=metrics['wl_ml'].item(),
+                                aac_mr=metrics['aac_mr'].item(), aac_ml=metrics['aac_ml'].item(), dasdv_mr=metrics['dasdv_mr'].item(),
+                                dasdv_ml=metrics['dasdv_ml'].item(),wamp_mr=metrics['wamp_mr'].item(), wamp_ml=metrics['wamp_ml'].item(), 
+                                fr_mr=metrics['fr_mr'].item(), fr_ml=metrics['fr_ml'].item(), mnp_mr=metrics['mnp_mr'].item(),
+                                mnp_ml=metrics['mnp_ml'].item(), tot_mr=metrics['tot_mr'].item(), tot_ml=metrics['tot_ml'].item(),
+                                mnf_mr=metrics['mnf_mr'].item(), mnf_ml=metrics['mnf_ml'].item(), mdf_mr=metrics['mdf_mr'].item(), 
+                                mdf_ml=metrics['mdf_ml'].item(), pkf_mr=metrics['pkf_mr'].item(), pkf_ml=metrics['pkf_ml'].item(),
+                                HRV_mean=metrics['HRV_mean'].item(), HRV_median=metrics['HRV_median'].item(), HRV_sdnn=metrics['HRV_sdnn'].item(),
+                                HRV_min=metrics['HRV_min'].item(), HRV_max=metrics['HRV_max'].item(), HRV_vhf=metrics['HRV_vhf'].item(),
+                                HRV_lf=metrics['HRV_lf'].item(), HRV_hf=metrics['HRV_hf'].item(), HRV_lf_hf=metrics['HRV_lf_hf'].item(),
+                                RRI=metrics['RRI'].item(), y_prob=1.00, confirmed=True, sensor="both", event_type="", status="new", justification=justification)
+    
+    #print(new_prediction)
+
+    db.session.add(new_prediction)
+    db.session.commit()
+
 # Prediction functions
 def calculate_hrv(ecg_90s):
     try:
@@ -286,16 +498,15 @@ def calculate_hrv(ecg_90s):
         sdnn = hrv["HRV_SDNN"][0]
         min = hrv["HRV_MinNN"][0]
         max = hrv["HRV_MaxNN"][0]
-        vlf = hrv["HRV_VLF"][0]
         vhf = hrv["HRV_VHF"][0]
         lf = hrv["HRV_LF"][0]
         hf = hrv["HRV_HF"][0]
         lf_hf = hrv["HRV_LFHF"][0]
 
 
-        return mean, median, sdnn, min, max, vlf, vhf, lf, hf, lf_hf
+        return mean, median, sdnn, min, max, vhf, lf, hf, lf_hf
     except:
-        return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
+        return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
 
 def next_power_of_2(x):
     return 1 if x == 0 else 2 ** (x - 1).bit_length()
@@ -320,7 +531,7 @@ def frequency_ratio(frequency, power):
 
     # Avoid division by zero in case the high-frequency power is 0
     if UHC == 0:
-        return np.inf  # Return infinity or handle it as appropriate
+        return np.nan  # Return infinity or handle it as appropriate
     else:
         return ULC / UHC
 
@@ -364,7 +575,7 @@ def peak_freq(frequency, power):
         return np.nan
 
 
-def get_rri(ecg, sampling_rate=2000):
+def get_rri(ecg, sampling_rate=200):
     ecg_clean = nk.ecg_clean(ecg, sampling_rate=sampling_rate)
     ecg_peaks = nk.ecg_findpeaks(ecg_clean, sampling_rate=sampling_rate)
     info, r_peaks_corrected = nk.signal_fixpeaks(ecg_peaks, sampling_rate=sampling_rate, iterative=False, show=False, method="Kubios")
@@ -421,14 +632,20 @@ def extract_features_for_prediction(sensor_data, window_size_emg_s=1, overlap_em
     features_1s = []
     features_90s = []
 
+    scaler_mr = MinMaxScaler(feature_range=(0,100))
+    scaler_ml = MinMaxScaler(feature_range=(0,100))
+
     ecg_data = sensor_data['ECG'].values
-    mr_data = sensor_data["MR"].values
-    ml_data = sensor_data["ML"].values
+    mr_data = pd.DataFrame(scaler_mr.fit_transform(sensor_data[["MR"]]), columns=["MR"])['MR'].values
+    ml_data = pd.DataFrame(scaler_ml.fit_transform(sensor_data[["ML"]]), columns=["ML"])['ML'].values
     
     mr_threshold = np.mean(mr_data) + 3 * np.std(mr_data)
     ml_threshold = np.mean(ml_data) + 3 * np.std(ml_data)
 
+    print("seconds: ", len(sensor_data)/200)
+
     for i in range(window_size_emg, len(sensor_data), overlap_emg):
+        # print(i, len(sensor_data))
 
         # Extract the 1-second window
         mr_window = mr_data[i-window_size_emg:i]
@@ -451,8 +668,8 @@ def extract_features_for_prediction(sensor_data, window_size_emg_s=1, overlap_em
         mav_ml = np.mean(np.abs(ml_window))
 
         # Log detector
-        log_det_mr = np.mean(np.log(np.absolute(mr_window)))
-        log_det_ml = np.mean(np.log(np.absolute(ml_window)))
+        log_det_mr = np.mean(np.log(np.maximum(np.absolute(mr_window), 1e-10))) 
+        log_det_ml = np.mean(np.log(np.maximum(np.absolute(ml_window), 1e-10)))
 
         # Wavelength
         wl_mr = np.sum(abs(np.diff(mr_window)))
@@ -465,10 +682,6 @@ def extract_features_for_prediction(sensor_data, window_size_emg_s=1, overlap_em
         # Difference absolute standard deviation value
         dasdv_mr = math.sqrt((1 / (window_size_emg - 1)) * np.sum((np.diff(mr_window)) ** 2))
         dasdv_ml = math.sqrt((1 / (window_size_emg - 1)) * np.sum((np.diff(ml_window)) ** 2))
-
-        # Zero Crossing Rate
-        zc_mr = np.sum((mr_window[:-1] * mr_window[1:]) < 0) 
-        zc_ml = np.sum((ml_window[:-1] * ml_window[1:]) < 0) 
 
         # Willison Amplitude
         wamp_mr = np.sum(np.abs(np.diff(mr_window)) > mr_threshold)
@@ -505,32 +718,33 @@ def extract_features_for_prediction(sensor_data, window_size_emg_s=1, overlap_em
         start_time = (i-window_size_emg) / sampling_rate
         end_time = i / sampling_rate
         
-        current_features = [start_time, end_time, std_mr, std_ml, var_mr, var_ml, rms_mr, rms_ml, mav_mr, mav_ml, log_det_mr, log_det_ml, wl_mr, wl_ml, aac_mr, aac_ml, dasdv_mr, dasdv_ml, zc_mr, zc_ml, wamp_mr, wamp_ml, fr_mr, fr_ml, mnp_mr, mnp_ml, tot_mr, tot_ml, mnf_mr, mnf_ml, mdf_mr, mdf_ml, pkf_mr, pkf_ml]
+        current_features = [start_time, end_time, std_mr, std_ml, var_mr, var_ml, rms_mr, rms_ml, mav_mr, mav_ml, log_det_mr, log_det_ml, wl_mr, wl_ml, aac_mr, aac_ml, dasdv_mr, dasdv_ml, wamp_mr, wamp_ml, fr_mr, fr_ml, mnp_mr, mnp_ml, tot_mr, tot_ml, mnf_mr, mnf_ml, mdf_mr, mdf_ml, pkf_mr, pkf_ml]
         features_1s.append(current_features)
     
 
         if i % 10000000 == 0:
             print(f"i: {i}")
 
+
     for i in range(window_size_ecg, len(ecg_data), overlap_ecg):
         # Extract 90 seconds of ECG data
         window_90s = ecg_data[i - window_size_ecg:i]  # 90-second window
 
-        mean, median, sdnn, min, max, vlf, vhf, lf, hf, lf_hf = calculate_hrv(window_90s)
+        mean, median, sdnn, min, max, vhf, lf, hf, lf_hf = calculate_hrv(window_90s)
 
         num_1s_windows_in_90s = window_size_ecg // window_size_emg
         for _ in range(num_1s_windows_in_90s):
-            features_90s.append([mean, median, sdnn, min, max, vlf, vhf, lf, hf, lf_hf])
+            features_90s.append([mean, median, sdnn, min, max, vhf, lf, hf, lf_hf])
 
 
-    combined_features = [f1 + f44 for f1, f44 in zip(features_1s, features_90s[:len(features_1s)])]
+    combined_features = [f1 + f41 for f1, f41 in zip(features_1s, features_90s[:len(features_1s)])]
 
     columns = ["start_time", "end_time", "std_mr", "std_ml", "var_mr", "var_ml", "rms_mr",
                "rms_ml", "mav_mr", "mav_ml", "log_det_mr", "log_det_ml", "wl_mr", "wl_ml",
-               "aac_mr", "aac_ml", "dasdv_mr", "dasdv_ml", "zc_mr", "zc_ml", "wamp_mr",
+               "aac_mr", "aac_ml", "dasdv_mr", "dasdv_ml","wamp_mr",
                "wamp_ml", "fr_mr", "fr_ml", "mnp_mr", "mnp_ml", "tot_mr", "tot_ml", "mnf_mr",
                "mnf_ml", "mdf_mr", "mdf_ml", "pkf_mr", "pkf_ml", "HRV_mean", "HRV_median", 
-               "HRV_sdnn", "HRV_min", "HRV_max", "HRV_vlf", "HRV_vhf", "HRV_lf", "HRV_hf", "HRV_lf_hf"]
+               "HRV_sdnn", "HRV_min", "HRV_max", "HRV_vhf", "HRV_lf", "HRV_hf", "HRV_lf_hf"]
     
     features = pd.DataFrame(combined_features, columns=columns)
 
@@ -555,6 +769,7 @@ def aggregate_events(df):
     current_event_features = []  # To collect feature values
     current_event_y_probs = []    # To collect y_prob values
     current_event_y_values = []    # To collect y values
+    #current_event_confirmed_values = []
 
     # Use a for loop to iterate over the DataFrame rows
     for index, row in df.iterrows():
@@ -566,6 +781,7 @@ def aggregate_events(df):
             current_event_features.append(row[2:-2].values)  # Collect feature values
             current_event_y_probs.append(row['y_prob'])  # Collect y_prob
             current_event_y_values.append(row['y'])  # Collect y
+            #current_event_confirmed_values.append(row['confirmed'])  # Collect confirmed
             continue
 
         # Check if the current row is part of the same event
@@ -577,6 +793,7 @@ def aggregate_events(df):
             current_event_features.append(row[2:-2].values)  # Append features
             current_event_y_probs.append(row['y_prob'])  # Append y_prob
             current_event_y_values.append(row['y'])  # Append y
+            #current_event_confirmed_values.append(row['confirmed'])  # Collect confirmed
         else:
             # Save the current event to the events dictionary
             if current_event_start is not None:
@@ -593,7 +810,8 @@ def aggregate_events(df):
                     "duration": current_event_end - current_event_start,
                     **feature_means,
                     "y": current_event_y_values[-1],  # Retain the last y value for the current event
-                    "y_prob": y_prob_mean  # Include the mean of y_prob
+                    "y_prob": y_prob_mean,  # Include the mean of y_prob
+                    "confirmed": True
                 }
                 event_counter += 1
             
@@ -603,6 +821,7 @@ def aggregate_events(df):
             current_event_features = [row[2:-2].values]  # Start new collection
             current_event_y_probs = [row['y_prob']]  # Start new collection
             current_event_y_values = [row['y']]  # Start new collection
+            #current_event_confirmed_values = [row['confirmed']]
 
     # Finalize the last event if it exists
     if current_event_start is not None:
@@ -618,7 +837,8 @@ def aggregate_events(df):
             "duration": current_event_end - current_event_start,
             **feature_means,
             "y": current_event_y_values[-1],  # Retain the last y value for the current event
-            "y_prob": y_prob_mean  # Include the mean of y_prob
+            "y_prob": y_prob_mean,  # Include the mean of y_prob
+            "confirmed": True
         }
 
     return events

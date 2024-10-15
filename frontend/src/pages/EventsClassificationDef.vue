@@ -5,23 +5,48 @@
         <el-col :span="13" :offset="1"><PipelineStepper :step="2" /></el-col>
         <el-col :span="2" :offset="1"><router-link :to="'/monitoring/'"><el-button type="primary"> Monitoring Dashboards  <el-icon> <ArrowRight /> </el-icon></el-button></router-link></el-col>
     </el-row>
-
-    <!--IMAGE ROW-->
     <el-row justify="center"> <h1>Patient {{ this.$store.state.patientId }}, Week {{ this.$store.state.weekId }}, file {{ this.$store.state.file }}, size {{ this.$store.state.fileSize }} GB</h1></el-row>
-
-    <el-row justify="center">
-        <h2>Signal and predicted events</h2>
-        <el-button type="info" @click="toggleImage" style="margin-left: 20px; margin-top: 10px" plain>
-        {{ isImageVisible ? 'Hide' : 'Show' }} Image
-        </el-button>    
-    </el-row>
-    <el-row justify="center">
-        <el-image v-if="isImageVisible" :src="nightPredImg" style="max-width: 900px" :preview-src-list="[nightPredImg]" fit="cover"/>
-    </el-row>
+    <!--
 
     <el-row>
-        <el-col :offset="18">
-            <div id="ec-heatmap" style="width: 560px; height: 500px;"></div>
+        <el-col :offset="5">
+            <div style="display: flex; align-items: center;">
+               <h2>Signal and predicted events</h2>
+                <el-button type="info" @click="toggleImage" style="margin-left: 20px; margin-top: 10px" plain>
+                    {{ isImageVisible ? 'Hide' : 'Show' }} Image
+                </el-button>   
+            </div>
+             
+        </el-col>
+    </el-row>
+    <el-row>
+        <el-col :span="13" :offset="2">
+            <el-image v-if="isImageVisible" :src="nightPredImg" style="max-width: 900px" :preview-src-list="[nightPredImg]" fit="cover"/>
+        </el-col>
+    -->
+    <el-row>
+        <el-col :span="13" :offset="2" v-loading="imgLoading" element-loading-text="Loading night images...">
+            <!-- Select dropdown for image selection -->
+            <el-select v-model="selectedImageLabel" placeholder="Select an image" @change="updateImage">
+                <el-option
+                    v-for="image in images"
+                    :key="image.label"
+                    :label="image.label"
+                    :value="image.label"
+                />
+            </el-select>
+            <el-button @click="this.loadImages('new')">
+                Update
+            </el-button>
+
+            <!-- Display the selected image -->
+            <div v-if="selectedImage">
+                <el-image :src="selectedImage" :alt="selectedImage" style="width: auto; height: 300px"
+                :zoom-rate="1.2" :max-scale="7" :min-scale="0.2" :preview-src-list="[selectedImage]"/>
+            </div>
+        </el-col>
+        <el-col :offset="1" :span="5">
+            <div id="ec-heatmap" style="width: 500px; height: 400px;"></div>
         </el-col>
     </el-row>
 
@@ -29,77 +54,147 @@
         <el-col :span="5" v-loading="!emgReceived">
             <el-card>
                 <div v-if="amountEvents === 0">
-                    No events predicted during currently selected frame.
+                    <h3>No events predicted during currently selected frame.</h3>
                 </div>
                 <div v-else>
-                    <el-card class="text item" v-for="(value, key) in current5minEvents" :key="key">
-                        <el-button type="primary" round @click="zoomToEvent(key, value)" style="margin-bottom: 10px; margin-right: 200px;">
-                            <el-tooltip content="Click to zoom" placement="top">Event {{ key.slice(1) }}</el-tooltip>
-                        </el-button>
-                        <el-popover
-                            placement="top-start"
-                            :title="`Event ${key.slice(1)}`"
-                            :width="200"
-                            trigger="hover"
-                        >
-                            <b>EMG Metrics</b><br>
-                            Avg. RMS MR: {{ (value.rms_mr).toFixed(2) }}<br>
-                            Avg. RMS MR: {{ (value.rms_ml).toFixed(2) }}<br>
-                            Avg. St. dev. MR : {{ (value.std_mr).toFixed(2) }} <br>
-                            Avg. Std. dev. ML {{ (value.std_ml).toFixed(2) }} <br>
-                            <b>HRV Metrics</b><br>
-                            LF/HF MR: {{ (value.HRV_lf_hf).toFixed(2) }} <br>Mean: {{ (value.HRV_mean).toFixed(2) }}<br> SD: {{ (value.HRV_sdnn).toFixed(2) }} <br>
+                    <h3>Predicted events:</h3>
+                    <el-scrollbar height="560px">
+                    <el-card class="text item" v-for="(value, key) in current5minEvents" :key="key" @click="clickCard()">
+                        <i>{{ getEventStatus(eventStatus[key])}}</i><br>
+                        <el-row justify="center" style="margin-bottom: 10px;">
+                            <el-button type="primary" round @click="zoomToEvent(key, value)" size="large">
+                                <el-tooltip content="Click to zoom" placement="top">Event {{ key.slice(1) }}</el-tooltip>
+                            </el-button>
+                            <el-popover
+                                placement="top-start"
+                                :title="`Event ${key.slice(1)}`"
+                                :width="200"
+                                trigger="hover"
+                            >
+                                <b>EMG Metrics</b><br>
+                                Avg. RMS MR: {{ (value.rms_mr).toFixed(2) }}<br>
+                                Avg. RMS MR: {{ (value.rms_ml).toFixed(2) }}<br>
+                                Avg. St. dev. MR : {{ (value.std_mr).toFixed(2) }} <br>
+                                Avg. Std. dev. ML {{ (value.std_ml).toFixed(2) }} <br>
+                                <b>HRV Metrics</b><br>
+                                LF/HF MR: {{ (value.HRV_lf_hf).toFixed(2) }} <br>Mean: {{ (value.HRV_mean).toFixed(2) }}<br> SD: {{ (value.HRV_sdnn).toFixed(2) }} <br>
 
-                            <template #reference>
-                                <el-icon size="large" color='#409EFF'><InfoFilled /></el-icon>
-                            </template>
-                        </el-popover>
+                                <template #reference>
+                                    <el-icon size="large" color='#409EFF'><InfoFilled /></el-icon>
+                                </template>
+                            </el-popover>
+                        </el-row>
+                        
                         <!--BOTTOM PART CARD-->
                         <div style="margin-left: 10px;">
                         <el-row>
                             <div>
-                                Start (s)   <el-input-number v-model="value.start_s" placeholder="Start" :step="0.01" :min="Math.min(...emgTime)" :max="Math.max(...emgTime)" size="small" @change="handleChange(key, value)" style="width: 120px; margin-bottom: 10px; margin-left: 5px;"/>
+                                Start (s)   <el-input-number v-model="value.start_s" placeholder="Start" :precision="2" :step="0.5" :min="Math.min(...emgTime)" :max="value.end_s-1" size="small" @change="updateMarkArea(key, value)" style="width: 125px; margin-bottom: 10px; margin-left: 5px;"/>
                             </div>
                             <div>
-                                End (s)   <el-input-number v-model="value.end_s" :step="0.01" :min="Math.min(...emgTime)" :max="Math.max(...emgTime)" size="small" @change="handleChange(key, value)" style="width: 120px; margin-bottom: 10px; margin-left: 10px;"/>
+                                End (s)   <el-input-number v-model="value.end_s" placeholder="End" :precision="2" :step="0.5" :min="value.start_s+1" :max="Math.max(...emgTime)" size="small" @change="updateMarkArea(key, value)" style="width: 120px; margin-bottom: 10px; margin-left: 10px;"/>
                             </div>
                         </el-row>
                         <el-row>
-                            <p><b>SD (event):</b>  4.2   <b style="margin-left: 10px;">Duration: </b> 5 s</p>
+                            <p><b>SD (event):</b>  {{(value.HRV_lf_hf).toFixed(2)}}   <b style="margin-left: 10px;">Duration: </b> {{(value.end_s-value.start_s).toFixed(2)}} s</p>
                         </el-row>
                         <el-row>
                             <div>
-                                Event type:     <el-button type="info" size="small" plain style="margin-left: 10px;"><el-icon><PriceTag /></el-icon> Phasic</el-button> <el-button type="info" size="small" plain>+ Add tag <el-icon><PriceTag /></el-icon></el-button>
+                                Event type:
+                                <el-radio-group v-model="eventTypes[key]" size="small" @change="updateEventType(key, eventTypes[key])" style="margin-left: 10px; margin-top: 20px;">
+                                    <el-radio-button label="Phasic" value="phasic" />
+                                    <el-radio-button label="Tonic" value="tonic" />
+                                    <el-radio-button label="Mixed" value="mixed" />
+                                </el-radio-group>
+                                <el-button type="danger" size="small" circle @click="updateEventType(key, '')" style="margin-top:4px; margin-left:5px"><el-icon><Close /></el-icon></el-button>
+                            </div>
+                        </el-row>
+                        <el-row style="margin-top: 20px;">
+                            <div style="display: flex; align-items: center;">
+                                Sensors:
+                                <el-checkbox-group v-model="sensorsCheckBox[key]" size="small" style="margin-left: 10px;" @change="handleSensorsCheckBoxChange(key, sensorsCheckBox[key])">
+                                    <el-checkbox-button value="MR">MR</el-checkbox-button>
+                                    <el-checkbox-button value="ML">ML</el-checkbox-button>
+                                </el-checkbox-group>
                             </div>
                         </el-row>
                         <el-row>
-                            <el-radio-group v-model="radioValues[key]" size="large" fill="#13ce66" style="margin-left: 40%; margin-top: 20px;">
-                                <el-radio-button label="Discard" :value="0" />
-                                <el-radio-button label="Confirm" :value="1" />
+                            <el-radio-group v-model="confirmedEvents[key]" size="large" @change="updateConfirmedEvents(key, confirmedEvents[key], value)" :fill="getFillColor(confirmedEvents[key])" style="margin-left: 40%; margin-top: 20px;">
+                                <el-radio-button label="Discard" :value="false" />
+                                <el-radio-button label="Confirm" :value="true" />
                             </el-radio-group>
-                        </el-row>
-
-                        <el-row v-if="event1Confirm">
-                            <div style="margin-top: 5px; margin-left: 40%;">Include: </div>
-                            <el-checkbox-group v-model="checkboxGroup" style="margin-left: 10px;">
-                                <el-checkbox-button v-for="sensor in sensors" :key="sensor" :value="sensor">
-                                    {{sensor}}
-                                </el-checkbox-button>
-                            </el-checkbox-group>
                         </el-row>
                     </div>
                     </el-card>
+                </el-scrollbar>
                 </div>
             </el-card>
         </el-col> 
         <el-col :span="1" style="margin-top:300px">
-            <el-button type="primary" circle @click="moveBackward()"><el-icon><ArrowLeft /></el-icon></el-button>
+            <el-button type="primary" circle @click="moveBackward()" :disabled="tileIndex==='0.00'"><el-icon><ArrowLeft /></el-icon></el-button>
         </el-col>
         <el-col :span="14" v-loading="!emgReceived" element-loading-text="Loading the data...">
+            <el-row>
+                    <label for="MrThreshold" :span="2" style="margin-right: 10px; margin-top: 5px;"><b>Threshold MR (% of MVC):</b></label>
+                    <el-input-number type="number" v-model="thresholdMr" :span="5" id="MrThreshold"  :step="1" @change="updateThresholdMr()" style="margin-right: 10px; width:120px"/>
+                    <!--<el-button :span="4" @click="updateThresholdMr()">Update Threshold</el-button>-->
+
+                    <div style="margin-left: 30px">
+                        <el-button id="edit-button" :plain="true" :type="buttonType" @click="clickButton">
+                            Edit Mode
+                        </el-button>
+                    </div>
+                    <div v-if="selectionActive && startSelection && endSelection" style="margin-left: 30px">
+                        <el-popover
+                            placement="bottom"
+                            :width="250"
+                            trigger="click"
+                            content="this is content, this is content, this is content"
+                        >
+                        <b>Add event</b>
+                        <el-form :model="eventForm" class="form-container">
+                            <el-form-item label="Start (s)">
+                            <el-input-number v-model="eventForm.start" :precision="2" :min="0" label="Start Time" />
+                            </el-form-item>
+                            <el-form-item label="End (s)">
+                            <el-input-number v-model="eventForm.end" :precision="2" :min="0" label="End Time" />
+                            </el-form-item>
+                            <b>Duration: {{ (eventForm.end - eventForm.start).toFixed(2)}} s</b>
+                            <el-form-item label="Reason for event">
+                                <el-input
+                                    v-model="eventForm.justificationNewEvent"
+                                    style="width: 240px"
+                                    :rows="2"
+                                    type="textarea"
+                                    placeholder="Please input"
+                                />
+                            </el-form-item>
+                            <el-form-item style="margin-top: 5px;">
+                            <el-button type="primary" @click="addNewEvent(eventForm.start, eventForm.end, eventForm.justificationNewEvent)">Submit</el-button>
+                            </el-form-item>
+                        </el-form>
+                            <template #reference>
+                            <el-badge is-dot class="item">
+                            <el-button class="m-2" @click="updateSelectionValues">+ Add</el-button> 
+                            </el-badge>
+                            </template>
+                        </el-popover>
+                    </div>
+                    <div style="margin-left: 30px">
+                        <el-button id="zoom-button" :plain="true" :disabled="zoomDisabled">
+                            Zoom
+                        </el-button>    
+                    </div>
+                
+            </el-row>
+            
             <div id="emg-chart" style="width: 100%; height: 600px;"></div>
+            <label for="MlThreshold" :span="2" style="margin-right: 10px; margin-top: 5px;"><b>Threshold ML (% of MVC):</b></label>
+                <el-input-number type="number" v-model="thresholdMl" :span="5" id="MlThreshold"  :step="1" @change="updateThresholdMl()" style="margin-right: 10px; width:120px"/>
+            <!--<el-button :span="4" @click="updateThresholdMl()">Update Threshold</el-button>-->
         </el-col>
         <el-col :span="1" style="margin-top:300px">
-            <el-button type="primary" circle @click="moveForward()"><el-icon><ArrowRight /></el-icon></el-button>
+            <el-button type="primary" circle @click="moveForward()" :disabled="(parseFloat(parseFloat(this.tileIndex)+0.5).toFixed(2)) > parseFloat((parseFloat(totalCells)).toFixed(2))"><el-icon><ArrowRight /></el-icon></el-button>
         </el-col>
         
     </el-row>
@@ -107,12 +202,13 @@
   </template>
   
   <script>
-  import img from '../assets/NightOverview.png'
+  //import img from '../assets/NightOverview.png'
   import PipelineStepper from '../components/PipelineStepper.vue'
   import * as echarts from 'echarts';
   import { markRaw } from 'vue';
   import axios from 'axios';
   import {ArrowRight, ArrowLeft} from '@element-plus/icons-vue'
+  import {reactive} from 'vue';
 
   export default {
     name: 'EventsClassificationDef',
@@ -125,13 +221,19 @@
         await this.getPredictions();
         await this.getData((0).toFixed(2));
         this.drawECHeatMap();
+        this.loadImages("old");
     },
     data () {
         return {
             isImageVisible: true,
-            nightPredImg: img,
+            //nightPredImg: img,
             mr: [],
             ml: [],
+            stdMr: [], 
+            stdMl: [],
+            hrvLfHf: [],
+            hrvMean: [],
+            hrvSdnn: [],
             emgTime: [],
             selectedInterval: [[0,0,0]],
             emgReceived: false,
@@ -141,19 +243,325 @@
             current5minEvents: {},
             amountEvents: 0,
             emgChart: null,
-            radioValues: {},
-            emgDataLengthS: 0
+            confirmedEvents: {},
+            emgDataLengthS: 0,
+            eventTypes: {},
+            eventDurations: {},
+            mvcMR: 0,
+            mvcML: 0,
+            maxAmplitudeMR: 0,
+            maxAMplitudeML: 0,
+            thresholdMr: parseInt(this.$store.state.thresholdMr),
+            thresholdMl: parseInt(this.$store.state.thresholdMl),
+            selectionActive: false,
+            buttonType: "",
+            zoomDisabled: false,
+            startSelection: null,
+            endSelection: null,
+            eventForm: reactive({
+                start: 0,
+                end: 0,
+                justificationNewEvent: ""
+            }),
+            sensorsCheckBox : {},
+            eventStatus: {},
+            totalCells: 0,
+            images: [],
+            selectedImage: '',
+            selectedImageLabel: '',
+            imgLoading: true
+
+
         }
     },
     methods: {
         toggleImage() {
             this.isImageVisible = !this.isImageVisible;
         },
-        handleChange(key, value){
-            console.log(value.start_s, value.end_s)
+        async loadImages(version) {
+            this.imgLoading = true
+            const baseUrl = `http://localhost:5000/night-images/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}/${version}`;
+            
+            const headers = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            };
+
+            // Make the request to get the image as a Blob
+            await axios.get(baseUrl, {headers})
+            .then(response => {
+                // Create a URL for the image blob
+                
+                // Assign the blob URL to your image source or handle it as needed
+                this.images = response.data;
+                const wholeNightSignal = response.data.find(image => image.label === 'Whole Night Signal');
+                console.log("WHOLE NIGHT SIGNAL: ", wholeNightSignal)
+                if (wholeNightSignal) {
+                    this.selectedImageLabel = wholeNightSignal.label;
+                    this.selectedImage = `${wholeNightSignal.src}?t=${new Date().getTime()}`; // Append timestamp
+                }
+                this.imgLoading = false
+
+                console.log("IMAGES: ", response.data)
+            })
+            .catch(err => {
+                console.log(err);
+            });
+        },
+        updateImage(value) {
+            const selectedImageData = this.images.find(image => image.label === value);
+            const timestamp = new Date().getTime();
+
+            if (selectedImageData) {
+                this.selectedImage = `${selectedImageData.src}?t=${timestamp}`; // Append timestamp to the src
+            }
+        },
+
+        getFillColor(confirmed) {
+            // Green for Confirm, Red for Discard
+            return confirmed ? '#13ce66' : '#ff4949';
+        },
+        clickButton() {
+            console.log("SELECTION MODE ACTIVE")
+            this.selectionActive = !this.selectionActive;
+
+            console.log(this.selectionActive)
+            if(this.selectionActive){
+                this.buttonType = "primary"
+                this.zoomDisabled = true
+            } else {
+                this.buttonType = ""
+                this.zoomDisabled = false
+            }
+        },
+        clickCard(){
+            console.log("card clicked")
+        },
+        async updateEventType(key, value){
+            const path = `http://127.0.0.1:5000/prediction-event-type/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
+
+            let payload= {};
+            if (value ==''){
+                this.eventTypes[key] = "";
+            }
+            payload['name'] = key;
+            payload['event_type'] = value;
+
+            console.log("PAYLOAD: ", payload)
+            const headers = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            };
+            await axios.patch(path, payload, {headers})
+                .then(() => {
+                    console.log("Event type of prediction updated!")
+                    //updateMark areas?
+
+                })
+                .catch(err=>{
+                    console.log(err)
+                })
+
+        },
+        getEventStatus(eventStatus){
+            if (eventStatus == "new"){
+                return "Manually added"
+
+            } else if (eventStatus == "model"){
+                return "Predicted by model"
+
+            } else if (eventStatus == "modified"){
+                return "Edited"
+            }
+
+        },
+        async handleSensorsCheckBoxChange(key, value){
+            console.log("Change sensors on DB")
+            console.log(key, value)
+            if(value.length === 0){
+                console.log("length: 0")
+                this.sensorsCheckBox[key] = ['MR', 'ML']
+            }
+            else if(value.sort().join(',')===  ['MR'].sort().join(',')){
+                console.log("remove ML from markArea")
+
+            } else if (value.sort().join(',')===  ['ML'].sort().join(',')) {
+                console.log("remove MR from markArea")
+                
+            } else if (value.sort().join(',')===  ['MR', 'ML'].sort().join(',')){
+                console.log("add MR, ML to markArea")
+            }
+
+            const path = `http://127.0.0.1:5000/prediction-sensors/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
+
+            let payload= {};
+            payload['name'] = key;
+            payload['sensor'] = value;
+
+            console.log("PAYLOAD: ", payload)
+            const headers = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            };
+            await axios.patch(path, payload, {headers})
+                .then(() => {
+                    console.log("Sensors of prediction updated!")
+                    //updateMark areas?
+
+                })
+                .catch(err=>{
+                    console.log(err)
+                })
+
+        },
+        async reloadData(){
+            await this.getPredictions();
+            await this.getData(this.tileIndex);
+            this.drawECHeatMap();
+        }, 
+        async addNewEvent(start, end, justification){
+            console.log("Add event: ", start, end)
+            console.log(this.current5minEvents)
+            //this.amountEvents ++;
+            //this.current5minEvents[key] = value
+            //await this.markEvent(this.eventForm.start, this.eventForm.end)
+            const path = `http://127.0.0.1:5000/predict-events/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
+            let payload= {};
+            payload['start_s'] = start;
+            payload['end_s'] = end;
+            payload['justification'] = justification;
+            console.log("PAYLOAD: ", payload)
+            const headers = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            };
+            await axios.post(path, payload, {headers})
+                .then(() => {
+                    console.log("Added new event!")
+                    this.selectionActive = false;
+                    this.emgChart.dispatchAction({
+                        type: 'brush',
+                        areas: []
+                    });
+                    this.reloadData();
+
+                })
+                .catch(err=>{
+                    console.log(err)
+                })
+
+        },
+        updateSelectionValues(){
+            this.eventForm.start = this.startSelection;
+            this.eventForm.end = this.endSelection;
+        },
+        async updateConfirmedEvents(keyEvent, boolConfirmed, value){
+            this.confirmedEvents[keyEvent] = boolConfirmed;
+            const path = `http://127.0.0.1:5000/confirmed-events/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
+            let payload= {};
+            payload['name'] = keyEvent;
+            payload['confirmed'] = boolConfirmed;
+            payload['start_s'] = value.start_s;
+            payload['end_s'] = value.end_s;
+            console.log("PAYLOAD: ", payload)
+            const headers = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            };
+            await axios.patch(path, payload, {headers})
+                .then(() => {
+                    console.log("Confirmed events updated!")
+                    this.updateMarkArea(keyEvent, value)
+
+                })
+                .catch(err=>{
+                    console.log(err)
+                })
+
+        },
+        updateMarkArea(key, value){
+            console.log(value.start_s, value.end_s);
+            console.log(this.confirmedEvents[key])
+            if (this.emgChart) {
+                const option = this.emgChart.getOption();
+                console.log(option);
+                
+                // Check if there are any series in the chart options
+                if (!option.series || option.series.length === 0) {
+                    console.error('No series found in chart options');
+                    return;
+                }
+                if(this.confirmedEvents[key] == true){
+                    console.log("update confirm")
+                    const path = `http://127.0.0.1:5000/confirmed-events/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
+                    let payload= {};
+                    payload['name'] = key;
+                    payload['start_s'] = value.start_s;
+                    payload['end_s'] = value.end_s;
+                    payload['confirmed'] = this.confirmedEvents[key];
+                    console.log("PAYLOAD: ", payload)
+                    const headers = {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    };
+                    axios.patch(path, payload, {headers})
+                        .then(() => {
+                            console.log("Confirmed events start and end updated!")
+                        })
+                        .catch(err=>{
+                            console.log(err)
+                        })
+                        
+                        // Calculate the normalized start and end positions
+                        let min = Math.min(...this.emgTime);
+                        let max = Math.ceil(Math.max(...this.emgTime));
+                        const start = parseFloat(value['start_s']); 
+                        const end = parseFloat(value['end_s']); 
+                        const startNorm = ((start - min) / (max - min)) * (300 - 0) + 0;
+                        const endNorm = ((end - min) / (max - min)) * (300 - 0) + 0;
+
+                        let found=false;
+                        // Iterate through both series to update markArea
+                        option.series.forEach(series => {
+                            if (series.markArea && series.markArea.data) {
+                                // Update the corresponding markArea for the specified key
+                                series.markArea.data.forEach(area => {
+                                    if (area[0].name === key) {
+                                        found=true;
+                                        area[0].xAxis = startNorm * 200; // Update the start xAxis
+                                        area[1].xAxis = endNorm * 200; // Update the end xAxis
+                                    }
+                                });
+                            }
+                        });
+                        if (found === false) {
+                            option.series.forEach(series => {
+                                series.markArea.data.push([
+                                    { name: key, xAxis: startNorm * 200 }, // New start point
+                                    { xAxis: endNorm * 200 } // New end point
+                                ]);
+                            })
+                        }
+
+                
+                } else {
+                    option.series.forEach(series => {
+                        if (series.markArea && series.markArea.data) {
+                            // Remove the entry with area[0].name === key
+                            series.markArea.data = series.markArea.data.filter(area => area[0].name !== key);
+                        }
+                    })
+                }
+                // Update the chart with the modified options
+                this.emgChart.setOption(option, true); // true to not merge with the previous options
+            }
         },
         async moveForward(){
+            console.log("MOVE FORWARD")
+            console.log((parseFloat(this.tileIndex) +0.5).toFixed(2))
+            console.log((parseFloat(this.totalCells)).toFixed(2))
             this.tileIndex = (parseFloat(this.tileIndex) + 0.50).toFixed(2)
+            
             console.log(this.selectedInterval.length)
             if(this.selectedInterval.length == 1){
                 console.log(this.selectedInterval[0])
@@ -181,13 +589,60 @@
         },
         async moveBackward(){
             console.log("move backward")
+            this.tileIndex = (parseFloat(this.tileIndex) - 0.50).toFixed(2)
+            let xCurrent = this.selectedInterval[0][0];
+            let yCurrent = this.selectedInterval[0][1];
+            let value = this.selectedInterval[0][2];
+
+
+            if (this.selectedInterval.length == 1) {
+                console.log(this.selectedInterval[0]);
+
+                console.log(xCurrent, yCurrent, value);
+                console.log(typeof xCurrent, typeof yCurrent, typeof value);
+
+                // Move backward in the grid
+                if (xCurrent == 0) {
+                    // If at the beginning of the row, move to the previous row
+                    yCurrent = yCurrent - 1;
+                    xCurrent = 17;  // Reset to the last column
+                } else {
+                    // Move one step back in the same row
+                    xCurrent = xCurrent - 1;
+                }
+
+                // Update the selected interval with the new xCurrent, yCurrent
+                this.selectedInterval.push([xCurrent, yCurrent, value]);
+                console.log(this.selectedInterval);
+
+            } else if (this.selectedInterval.length == 2) {
+                // Remove the first element if the interval length is 2
+                
+                // Move backward in the grid
+                if (xCurrent == 0) {
+                    // If at the beginning of the row, move to the previous row
+                    yCurrent = yCurrent - 1;
+                    xCurrent = 17;  // Reset to the last column
+                } else {
+                    // Move one step back in the same row
+                    xCurrent = xCurrent - 1;
+                }
+                this.selectedInterval = [];
+                this.selectedInterval.push([xCurrent, yCurrent, value]);
+            }
+
+            // Redraw the heatmap and fetch the new data
+            this.drawECHeatMap();
+            await this.getData(this.tileIndex);
         },
         async getData(idx) {
             this.emgReceived = false;
+            this.amountEvents = 0;
 
-            const nd_path = `http://127.0.0.1:5000/night-duration/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
+            const mvcPath = `http://127.0.0.1:5000/mvc/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
+            const ndPath = `http://127.0.0.1:5000/night-duration/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
 
-            const path = `http://127.0.0.1:5000/get-emg/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}/${idx}`;
+            const emgPath = `http://127.0.0.1:5000/get-emg/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}/${idx}`;
             const headers = {
                 Accept: 'application/json',
                 'Content-Type': 'application/json',
@@ -203,7 +658,18 @@
             this.cancelToken = axios.CancelToken.source();
 
             try {
-                await axios.get(nd_path, {headers})
+
+                await axios.get(mvcPath, {headers})
+                .then((res) => {
+                    this.mvcMR = (res.data.mvc_mr).toFixed(2);
+                    this.mvcML = (res.data.mvc_ml).toFixed(2);
+                    console.log("mvcMR", res.data.mvc_mr)
+
+                })
+                .catch(err=>{
+                    console.log(err)
+                })
+                await axios.get(ndPath, {headers})
                 .then((res) => {
                     this.emgDataLengthS = res.data.duration_s;
                     console.log("duration s: ", res.data.duration_s)
@@ -213,7 +679,7 @@
                     console.log(err)
                 })
 
-                const res = await axios.get(path, {
+                const res = await axios.get(emgPath, {
                 headers,
                 cancelToken: this.cancelToken.token, // Attach the cancel token
                 });
@@ -221,19 +687,42 @@
                 console.log(res.data);
                 this.mr = res.data.MR;
                 this.ml = res.data.ML;
+                this.stdMr = res.data.std_mr;
+                this.stdMl = res.data.std_ml;
+                this.hrvLfHf = res.data.HRV_lf_hf;
+                this.hrvMean = res.data.HRV_mean;
+                this.hrvSdnn = res.data.HRV_sdnn;
+                this.maxAmplitudeMR = Math.max(...res.data.MR);
+                this.maxAmplitudeML = Math.max(...res.data.ML);
+                console.log("max amplitude mr: ", this.maxAmplitudeMR)
                 this.emgTime = res.data.EMG_t;
                 this.emgReceived = true;
-                let events = this.mapEventTimesToEmgTimeInRange(this.predictions, res.data.EMG_t);
-                console.log(events)
-                console.log(Object.keys(events).length)
-                this.current5minEvents = events;
-                if(Object.keys(events).length >0){
-                    this.amountEvents = Object.keys(events).length;
-                    console.log("amount: ", this.amountEvents)
-                }
-                for (const key of Object.keys(events)){
-                    console.log(key)
-                    this.radioValues[key] = 1
+
+                console.log(Object.keys(this.predictions).length)
+
+                if(Object.keys(this.predictions).length >0){
+                    let events = this.mapEventTimesToEmgTimeInRange(this.predictions, res.data.EMG_t);
+                    console.log(events)
+                    console.log(Object.keys(events).length)
+                    this.current5minEvents = events;
+                    if(Object.keys(events).length >0){
+                        this.amountEvents = Object.keys(events).length;
+                        console.log("amount: ", this.amountEvents)
+                    }
+                    for (const key of Object.keys(events)){
+                        console.log(key)
+                        this.confirmedEvents[key] = events[key].confirmed;
+                        this.eventTypes[key] = events[key].event_type;
+                        this.eventDurations[key] = {}
+                        this.eventStatus[key] = events[key].status;
+                        if(events[key].sensor === 'both'){
+                            this.sensorsCheckBox[key] = ['MR', 'ML']
+                        } else if (events[key].sensor === 'MR') {
+                            this.sensorsCheckBox[key] = ['MR']
+                        } else if (events[key].sensor === 'ML'){
+                            this.sensorsCheckBox[key] = ['ML']
+                        }
+                    }
                 }
                 
                 this.drawEMGLinePlot(); // Function to draw the EMG plot with the fetched data
@@ -251,8 +740,8 @@
 
             console.log("min: ", emgTimeMin)
             console.log("max: ", emgTimeMax)
-            events = events.replace(/NaN/g, 'null');
-            events = JSON.parse(events)
+            //events = events.replace(/NaN/g, 'null');
+            //events = JSON.parse(events)
             console.log(typeof events)
 
             // Helper function to find the closest value in the emgTime array
@@ -324,24 +813,40 @@
         async drawEMGLinePlot(){
             let emgChart = markRaw(echarts.init(document.getElementById('emg-chart')));
             this.emgChart = emgChart;
-            let events = this.mapEventTimesToEmgTimeInRange(this.predictions, this.emgTime);
-            this.current5minEvents = events;
-            console.log(this.predictions)
-            console.log("events in 5 min: ", events)
+
+            let mvcMR = this.mvcMR;
+            let mvcML = this.mvcML;
+            let stdMR = this.stdMr;
+            let stdML = this.stdMl;
+            let hrvLfHf = this.hrvLfHf;
+            let hrvMean = this.hrvMean;
+            let hrvSdnn = this.hrvSdnn;
             let markAreaData = [];
+            let events = {}
 
-            let min = Math.min(...this.emgTime)
-            let max = Math.ceil(Math.max(...this.emgTime))
+            if(Object.keys(this.predictions).length > 0) {
+                events = this.mapEventTimesToEmgTimeInRange(this.predictions, this.emgTime);
+                this.current5minEvents = events;
+                console.log(this.predictions)
+                console.log("events in 5 min: ", events)
 
-            
-            for (const [key, value] of Object.entries(events)){
-                const start = parseFloat(value['start_s']);
-                const end = parseFloat(value['end_s']);
-                const startNorm = ((start - min) / (max-min)) * (300-0) + 0
-                const endNorm = ((end - min) / (max-min)) * (300-0) + 0
-                markAreaData.push([{ name: key, xAxis: startNorm*200}, { xAxis: endNorm*200}]);
+                let min = Math.min(...this.emgTime)
+                let max = Math.ceil(Math.max(...this.emgTime))
+
+                
+                for (const [key, value] of Object.entries(events)){
+                    const start = parseFloat(value['start_s']);
+                    const end = parseFloat(value['end_s']);
+                    const startNorm = ((start - min) / (max-min)) * (300-0) + 0
+                    const endNorm = ((end - min) / (max-min)) * (300-0) + 0
+                    if(this.confirmedEvents[key] === true){
+                       markAreaData.push([{ name: key, xAxis: startNorm*200}, { xAxis: endNorm*200}]); 
+                    }
+                    
+                }
+                console.log("markarea: ", markAreaData)
+
             }
-            console.log("markarea: ", markAreaData)
             let option;
 
             option = {
@@ -372,29 +877,67 @@
                     formatter: function (params) {
                         if (params !== undefined) {  
                             params.sort((a, b) => a.seriesIndex - b.seriesIndex);
-                            let title = "" 
+                            let title = "";
+                            let startEvent = null;
+                            let endEvent = null;
+                            let eventMeanFreqMr = null;
+                            let eventMeanFreqMl = null;
                             //console.log("PARAMS: ", params)
-                            console.log(option)
-                            //let xPoint = params[0].dataIndex;
+                            let xPoint = parseFloat(params[0].axisValue);
                             let yPoint = params[0].value;
                             //console.log(this.tileIndex)
                             //let factor = this.tileIndex + 1.00
                             const formattedValue = yPoint.toFixed(2);
+                            //console.log(stdMR)
+                            
+                            let currentStdMR = stdMR[params[0].dataIndex].toFixed(2);
+                            let currentStdML = stdML[params[1].dataIndex].toFixed(2);
+                            let currentHrvLfHf = hrvLfHf[params[0].dataIndex].toFixed(2);
+                            let currentHrvMean =hrvMean[params[0].dataIndex].toFixed(2);
+                            let currentHrvSdnn =hrvSdnn[params[0].dataIndex].toFixed(2);
+
+                            
+
+                            if(Object.keys(events).length > 0){
+                                for (const [key, value] of Object.entries(events)){
+                                    //console.log(value['start_s'], value['end_s'])
+                                    //console.log(xPoint, yPoint)
+                                    if(value['start_s'] <= xPoint && value['end_s'] >= xPoint){
+                                        title = "Event " + key.slice(1)
+                                        console.log("dentro")
+                                        startEvent = value['start_s']
+                                        endEvent = value ['end_s']
+
+                                        eventMeanFreqMr = (value['mnf_mr']).toFixed(2);
+                                        eventMeanFreqMl = (value ['mnf_ml']).toFixed(2);
+                                    }
+                                }
+                            }
 
                             // Return the tooltip HTML
                             return `
-                                ${params[0].marker}  <b>MR</b> : ${formattedValue} V<br>
+                                ${title ? `<strong>${title}</strong><br>Start: ${startEvent.toFixed(2)} s, End: ${endEvent.toFixed(2)} s<br>Duration: ${(endEvent-startEvent).toFixed(2)} s<br>Fmean MR : ${eventMeanFreqMr} Hz<br>Fmean ML : ${eventMeanFreqMl} Hz<br>Fmedian: Hz<br>Other event features (?)<hr>` : ''}
+                                ${params[0].marker}  <b>MR</b> : ${formattedValue}<br>
+                                MVC MR: ${mvcMR}<br>
+                                Std. MR: ${currentStdMR}<br>
                                 <hr>
-                                ${params[1].marker} <b>ML</b> : ${params[1].value.toFixed(2)} V<br>
-                                LF/HF (5 min): 0.33<br>
+                                ${params[1].marker} <b>ML</b> : ${params[1].value.toFixed(2)}<br>
+                                MVC ML: ${mvcML}<br>
+                                Std. ML: ${currentStdML}<br>
+                                <hr>
+                                <b> HRV metrics</b><br>
+                                LF / HF: ${currentHrvLfHf}<br>
+                                Mean: ${currentHrvMean}<br>
+                                SD: ${currentHrvSdnn}<br>
+                                <!--LF/HF (5 min): <br>
                                 Mean (5 min)<br>
-                                SD (5 min): 5<br>
-                                SD (Sleep cycle 2 (90 min)): 6<br>
-                                ${title ? `SD (5 s before & after event): 7<br>SD (during event): 3` : ''}
+                                SD (5 min): <br>
+                                SD (Sleep cycle (90 min)): 6<br>
+    
+                                ${title ? `SD (5 s before & after event): 7<br>SD (during event): ` : ''}-->
                                 <hr>
                                 t: ${(parseFloat(params[0].axisValue)).toFixed(2)} s<br>
                                 Sampling Rate: 200 Hz<br>
-                                Sleep cycle: 2<br>
                             `;
                         }       
                     }
@@ -406,7 +949,10 @@
                     }
                     ],
                     label: {
-                    backgroundColor: '#777'
+                        backgroundColor: '#777',
+                        formatter: function (params) {
+                            return parseFloat(params.value).toFixed(2); // Format the x-axis value to 2 decimal places
+                        }
                     }
                 },
                 toolbox: {
@@ -415,13 +961,16 @@
                             yAxisIndex: false
                         },
                         brush: {
-                            type: ['lineX', 'clear']
+                            type: ['lineX', 'clear'],
                         }
                     }
                 },
                 brush: {
-                    xAxisIndex: 'all',
-                    brushLink: 'all',
+                    type: ['lineX', 'clear'],
+                    xAxisIndex: 'all', // Apply brush to all x-axes
+                    yAxisIndex: 'all', // Apply brush to all y-axes
+                    brushLink: [0,1],  // Link the selection to both series
+                    seriesIndex: [0, 1], // Apply the brush to both series
                     outOfBrush: {
                         colorAlpha: 0.1
                     }
@@ -451,23 +1000,6 @@
                     height: '40%',
                     }
                 ],
-                /*
-                visualMap: {
-                    show: false,
-                    seriesIndex: 5,
-                    dimension: 2,
-                    pieces: [
-                    {
-                        value: 1,
-                        color: downColor
-                    },
-                    {
-                        value: -1,
-                        color: upColor
-                    }
-                    ]
-                },
-                */
                 xAxis: [
                     {
                     type: 'category',
@@ -505,6 +1037,7 @@
                         gridIndex: 0,
                         type: 'value',
                         name: 'Amplitude (V)',
+                        max: Math.max(Math.ceil(this.maxAmplitudeMR), Math.ceil(this.maxAmplitudeML), this.mvcMR, this.mvcML),
                         yAxisIndex: 0,
                         scale: true,
                         splitArea: {
@@ -515,6 +1048,7 @@
                         gridIndex: 1,
                         type: 'value',
                         name: 'Amplitude (V)',
+                        max: Math.max(Math.ceil(this.maxAmplitudeMR), Math.ceil(this.maxAmplitudeML)),
                         scale: true,
                         splitArea: {
                             show: true
@@ -529,17 +1063,49 @@
                     xAxisIndex:0,
                     yAxisIndex: 0,
                     showSymbol:false,
+                    lineStyle: {
+                        color: 'rgba(0, 0, 255, 0.6)' // Blue line with alpha
+                    },
+                    itemStyle: {
+                        color: 'rgba(0, 0, 255, 0.6)' // Blue dot color with alpha for tooltips
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 255, 0.6)' // Tooltip background matching the line
+                    },
                     markArea: {
                         itemStyle: {
-                            color: '#d0aee5',
+                            color: 'rgba(208, 174, 229, 0.5)',  // Light purple with transparency
                             borderColor: '#a942e9',  // Border color of the mark area
-                            borderWidth: 2,  // Border width
+                            borderWidth: 1,  // Border width
                         },
                         data: markAreaData
+                    },
+                    markLine: {
+                        data: [
+                            {
+                                yAxis: (this.thresholdMr*this.mvcMR/100).toFixed(2), // Set the threshold value here
+                                label: {
+                                    formatter: 'Threshold', // Customize label
+                                    position: 'start', // Position label at the end of the line
+                                },
+                                lineStyle: {
+                                    color: 'rgba(58, 128, 60, 0.7)', // Slightly opaque line for visibility
+                                    type: 'solid' // Change to 'dashed' if preferred
+                                }
+                            },
+                            {
+                                yAxis: this.mvcMR, // Set the threshold value here
+                                label: {
+                                    formatter: 'MVC', // Customize label
+                                    position: 'start', // Position label at the end of the line
+                                },
+                                lineStyle: {
+                                    color: 'rgba(255, 127, 80, 0.7)', // Customize line color
+                                    type: 'solid' // Customize line type (solid, dashed, dotted, etc.)
+                                }
+                            }
+                        ]
                     }
-                    /*
-                    markLine: {}
-                    */
                     },
                     {
                     name: 'ML',
@@ -548,25 +1114,162 @@
                     xAxisIndex:1,
                     yAxisIndex: 1,
                     showSymbol:false,
+                    lineStyle: {
+                        color: 'rgba(255, 0, 0, 0.6)' // Red line with alpha
+                    },
+                    itemStyle: {
+                        color: 'rgba(255, 0, 0, 0.6)' // Red dot color with alpha for tooltips
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(255, 0, 0, 0.6)' // Tooltip background matching the line
+                    },
                     markArea: {
                         itemStyle: {
-                            color: '#d0aee5',
+                            color: 'rgba(208, 174, 229, 0.5)',  // Light purple with transparency
                             borderColor: '#a942e9',  // Border color of the mark area
-                            borderWidth: 2,  // Border width
+                            borderWidth: 1,  // Border width
                         },
                         data: markAreaData
+                    },
+                    markLine: {
+                        data: [
+                            {
+                                yAxis: (this.thresholdMl*this.mvcML/100).toFixed(2), // Set the threshold value here
+                                label: {
+                                    formatter: 'Threshold', // Customize label
+                                    position: 'start', // Position label at the end of the line
+                                },
+                                lineStyle: {
+                                    color: 'rgba(58, 128, 60, 0.7)', // Slightly opaque line for visibility
+                                    type: 'solid' // Change to 'dashed' if preferred
+                                }
+                            }, {
+                                yAxis: this.mvcML, // Set the threshold value here
+                                label: {
+                                    formatter: 'MVC', // Customize label
+                                    position: 'start', // Position label at the end of the line
+                                },
+                                lineStyle: {
+                                    color: 'rgba(255, 127, 80, 0.7)', // Customize line color
+                                    type: 'solid' // Customize line type (solid, dashed, dotted, etc.)
+                                }
+                            }
+                        ]
                     }
-                    /*
-                    markLine: {}
-                    */
                     },
                 ]
                 }
             
             this.emgChart.setOption(option);
 
+            document.getElementById('edit-button').addEventListener('click', () => {
+                if(this.selectionActive==true){
+                    this.emgChart.dispatchAction({
+                        type: 'takeGlobalCursor',
+                        key: 'brush',
+                        brushOption: {
+                            brushType: 'lineX',
+                            brushMode: 'single'
+                        }
+                    });
+                } else {
+                    this.emgChart.dispatchAction({
+                        type: 'brush',
+                        areas: []
+                    });
+                }
+                
+            });
 
+            this.emgChart.on('brushSelected', this.handleBrushSelection);
+        },
+        handleBrushSelection(params) {
+            this.selectionActive = true;
+            const selected = params.batch[0];
+            console.log("selected: ", selected)
+            if (selected) {
+                const { areas } = selected;
+                
+                if (areas.length === 0){
+                    this.startSelection = null;
+                    this.endSelection = null;
+                } else {
+                    console.log("areas[0]: ", areas[0])
+                    console.log(this.emgTime[areas[0].coordRange[0]], this.emgTime[areas[0].coordRange[1]])
+                    this.coords = areas[0].coordRange;
 
+                    this.startSelection = this.emgTime[areas[0].coordRange[0]];
+                    this.endSelection = this.emgTime[areas[0].coordRange[1]];
+                }
+            }
+        },
+        updateThresholdMr(){
+            var thresholdMr = document.getElementById('MrThreshold').value;
+            this.$store.commit('setThresholdMr', thresholdMr);
+            console.log("emgChart: ", this.emgChart)
+            this.emgChart.setOption({
+                series: [{
+                    name: 'MR',
+                    markLine: {
+                    data: [
+                        {
+                            yAxis: (this.mvcMR*thresholdMr/100).toFixed(2), // Set the threshold value here
+                            label: {
+                                formatter: 'Threshold', // Customize label
+                                position: 'start', // Position label at the end of the line
+                            },
+                            lineStyle: {
+                                color: 'red', // Customize line color
+                                type: 'dashed' // Customize line type (solid, dashed, dotted, etc.)
+                            }
+                        }, {
+                                yAxis: this.mvcMR, // Set the threshold value here
+                                label: {
+                                    formatter: 'MVC', // Customize label
+                                    position: 'start', // Position label at the end of the line
+                                },
+                                lineStyle: {
+                                    color: 'orange', // Customize line color
+                                    type: 'solid' // Customize line type (solid, dashed, dotted, etc.)
+                                }
+                            }
+                    ]
+            }}]
+            }, false, false);
+        },
+        updateThresholdMl(){
+            var thresholdMl = document.getElementById('MlThreshold').value;
+            this.$store.commit('setThresholdMl', thresholdMl);
+            console.log("emgChart: ", this.emgChart)
+            this.emgChart.setOption({
+                series: [{
+                    name: 'ML',
+                    markLine: {
+                    data: [
+                        {
+                            yAxis: (this.mvcML*thresholdMl/100).toFixed(2), // Set the threshold value here
+                            label: {
+                                formatter: 'Threshold', // Customize label
+                                position: 'start', // Position label at the end of the line
+                            },
+                            lineStyle: {
+                                color: 'red', // Customize line color
+                                type: 'dashed' // Customize line type (solid, dashed, dotted, etc.)
+                            }
+                        },{
+                                yAxis: this.mvcML, // Set the threshold value here
+                                label: {
+                                    formatter: 'MVC', // Customize label
+                                    position: 'start', // Position label at the end of the line
+                                },
+                                lineStyle: {
+                                    color: 'orange', // Customize line color
+                                    type: 'solid' // Customize line type (solid, dashed, dotted, etc.)
+                                }
+                            }
+                    ]
+            }}]
+            }, false, false);
         },
         generateHeatmapData(totalDurationInSeconds, events) {
             const cellsPerRow = 18;          // Number of cells in each row
@@ -574,6 +1277,11 @@
 
             // Total number of cells based on the total duration in seconds
             const totalCells = Math.ceil(totalDurationInSeconds / cellDuration);
+            this.totalCells = totalCells-1;
+            let x = (parseFloat(totalCells)).toFixed(2)
+            let y = (parseFloat(this.tileIndex) +0.5).toFixed(2)
+            console.log(x, y)
+            console.log(y > x)
             const numRows = Math.ceil(totalCells / cellsPerRow); // Total number of rows needed
             console.log(numRows);
 
@@ -592,8 +1300,8 @@
             }
             console.log(events)
             if(Object.keys(events).length !== 0){
-                events = events.replace(/NaN/g, 'null');
-                events = JSON.parse(events)
+                //events = events.replace(/NaN/g, 'null');
+                //events = JSON.parse(events)
                 // Now we will check the events to populate the heatmap data
                 for (const eventKey in events) {
                     console.log("eventKey: ", eventKey)
@@ -656,7 +1364,7 @@
                 },
                 xAxis: {
                     type: 'category',
-                    name: "minutes",
+                    name: "min",
                     data: minutes,
                     splitArea: {
                         show: true
@@ -676,7 +1384,7 @@
                     type: 'continuous',
                     dimension: 2,
                     min: 0,
-                    max: Object.keys(this.predictions).length == 0? 0: Object.keys(...this.predictions).length,
+                    max: Object.keys(this.predictions).length == 0? 0: Object.keys(this.predictions).length,
                     seriesIndex: 0,
                     calculable: false,
                     show: false,
@@ -696,10 +1404,11 @@
                     type: 'heatmap',
                     data: data,
                     seriesIndex: 0,
+                    center: ["50%", "75%"],
                     label: {
                         show: true,
                         formatter: function (params) {
-                            console.log(params)
+                            //console.log(params)
                             if(parseInt(params.data[2])>0){
                                 return params.data[2]
                             } else {
