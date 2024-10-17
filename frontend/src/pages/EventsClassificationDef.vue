@@ -5,7 +5,8 @@
         <el-col :span="13" :offset="1"><PipelineStepper :step="1" /></el-col>
         <el-col :span="2" :offset="1"><router-link :to="'/monitoring/'"><el-button type="primary"> Monitoring Dashboards  <el-icon> <ArrowRight /> </el-icon></el-button></router-link></el-col>
     </el-row>
-    <el-row justify="center"> <h1>Patient {{ this.$store.state.patientId }}, Week {{ this.$store.state.weekId }}, file {{ this.$store.state.file }}, size {{ this.$store.state.fileSize }} GB</h1></el-row>
+    <el-row justify="center"> <h2>Patient {{ this.$store.state.patientId }}, Week {{ this.$store.state.weekId }}, file {{ this.$store.state.file }}, size {{ this.$store.state.fileSize }} GB</h2></el-row>
+    <!--BASIC USER-->
     <div v-if="this.$store.state.userType==='basic'">
         <el-row justify="center">
             <el-col :span="7">
@@ -18,50 +19,57 @@
                             :value="image.label"
                         />
                     </el-select>
-                    <el-button @click="this.loadImages('new')" style="margin-left:7px">
-                        Update
-                    </el-button>
                 </div>
             </el-col>
         </el-row>
         <el-row justify="center">
             <!-- Display the selected image -->
             <div v-if="selectedImage">
-                <el-image :src="selectedImage" :alt="selectedImage" style="width: auto; height: auto"
+                <el-image id="selected-image" :src="selectedImage" :alt="selectedImage" style="width: auto; height: auto"
                     :zoom-rate="1.2" :max-scale="7" :min-scale="0.2" :preview-src-list="[selectedImage]"/>
             </div>
         </el-row>
     </div>
+
+    <!--ADVANCED USER -->
     <div v-else>
         <el-row>
-            <el-col :span="13" :offset="2" v-loading="imgLoading" element-loading-text="Loading night images...">
+            <el-col :span="11" :offset="2" v-loading="imgLoading" element-loading-text="Loading night images..." class="centered-column">
                 <!-- Select dropdown for image selection -->
-                <el-select v-model="selectedImageLabel" placeholder="Select an image" @change="updateImage">
-                    <el-option
-                        v-for="image in images"
-                        :key="image.label"
-                        :label="image.label"
-                        :value="image.label"
-                    />
-                </el-select>
-                <el-button @click="this.loadImages('new')">
-                    Update
-                </el-button>
+                <div class="image-selection">
+                    <el-select v-model="selectedImageLabel" placeholder="Select an image" @change="updateImage" style="width:300px;">
+                        <el-option
+                            v-for="image in images"
+                            :key="image.label"
+                            :label="image.label"
+                            :value="image.label"
+                        />
+                    </el-select>
+                    <el-button @click="this.loadImages('new')" style="margin-left: 8px;">
+                        Update
+                    </el-button>
+                </div>
 
                 <!-- Display the selected image -->
-                <div v-if="selectedImage">
-                    <el-image :src="selectedImage" :alt="selectedImage" style="width: auto; height: 300px"
-                    :zoom-rate="1.2" :max-scale="7" :min-scale="0.2" :preview-src-list="[selectedImage]"/>
+                <div v-if="selectedImage" class="selected-image-container">
+                    <el-image :src="selectedImage" :alt="selectedImage" style="width: auto; height: 240px"
+                            :zoom-rate="1.2" :max-scale="7" :min-scale="0.2" :preview-src-list="[selectedImage]" />
                 </div>
             </el-col>
-            <el-col :offset="1" :span="5">
+
+            <el-col :span="11" class="centered-column">
                 <el-radio-group v-model="heatMapRadio" @change="selectHeatMap(heatMapRadio)">
                     <el-radio-button label="Events" value="events" />
                     <el-radio-button label="Sleep Stages" value="ssd" />
                 </el-radio-group>
-                <div v-if="Object.keys(this.predictions).length === 0"><h3>No events predicted.</h3></div>
-                <div v-if="heatMapRadio === 'events'" id="ec-heatmap" v-loading="!ssdDataReceived" element-loading-text="Retrieving events and sleep stages data..." style="width: 500px; height: 400px;"></div>
-                <div v-else id="ssd-heatmap" v-loading="!ssdDataReceived" element-loading-text="Retrieving sleep stages data..." style="width: 500px; height: 400px;"></div>
+                <!--
+                <div v-if="Object.keys(this.predictions).length === 0">
+                    <h3>No events predicted.</h3>
+                </div>
+            -->
+                <div v-if="heatMapRadio === 'events'" id="ec-heatmap" v-loading="!ssdDataReceived" element-loading-text="Retrieving events and sleep stages data..."></div>
+
+                <div v-else id="ssd-heatmap" v-loading="!ssdDataReceived" element-loading-text="Retrieving sleep stages data..."></div>
             </el-col>
         </el-row>
 
@@ -133,6 +141,34 @@
                                     </el-checkbox-group>
                                 </div>
                             </el-row>
+                            <!--REASON-->
+                            <el-row style="margin-top: 20px;">
+                                <div>
+                                <p><b>Reason for decision:</b></p>
+                                <div v-if="!eventJustifications[key].saved">
+                                    <!-- Input field for reason -->
+                                    <el-input
+                                        v-model="eventJustifications[key].justification"
+                                        type="textarea"
+                                        placeholder="Enter reason for accepting/discarding this event"
+                                        rows="3"
+                                        style="width: 100%;"
+                                    />
+                                    <el-button
+                                        type="primary"
+                                        @click="saveJustification(key, eventJustifications[key])"
+                                        style="margin-top: 10px;"
+                                        >Save Reason
+                                    </el-button>
+                                </div>
+                                <div v-else style="display: flex; align-items: center;">
+                                    <!-- Display saved reason -->
+                                    <p>{{ eventJustifications[key].justification }}</p>
+                                    <el-button @click="editJustification(key, eventJustifications[key])"><el-icon><Edit /></el-icon></el-button>
+                                </div>
+                                </div>
+                            </el-row>
+                            <!--EMD REASON-->
                             <el-row>
                                 <el-radio-group v-model="confirmedEvents[key]" size="large" @change="updateConfirmedEvents(key, confirmedEvents[key], value)" :fill="getFillColor(confirmedEvents[key])" style="margin-left: 40%; margin-top: 20px;">
                                     <el-radio-button label="Discard" :value="false" />
@@ -153,10 +189,10 @@
                     <el-button style="width:100%; margin-top:3px"><el-icon style="margin-right: 3px"><Refresh /></el-icon> Retrain Model</el-button>
                 </el-tooltip>
             </el-col> 
-            <el-col :span="1" style="margin-top:300px">
+            <el-col :span="1" :offset="1" style="margin-top:300px">
                 <el-button type="primary" circle @click="moveBackward()" :disabled="tileIndex==='0.00'"><el-icon><ArrowLeft /></el-icon></el-button>
             </el-col>
-            <el-col :span="14" v-loading="!emgReceived" element-loading-text="Loading the data...">
+            <el-col :span="13" v-loading="!emgReceived" element-loading-text="Loading the data...">
                 <el-row>
                         <label :span="2" style="margin-right: 10px; margin-top: 5px;"><b>Threshold MR (% of MVC):</b></label>
                         <el-input-number type="number" v-model="thresholdMr" :span="5"  :step="1" @change="updateThresholdMr(thresholdMr)" style="margin-right: 10px; width:120px"/>
@@ -287,6 +323,7 @@
             confirmedEvents: {},
             emgDataLengthS: 0,
             eventTypes: {},
+            eventJustifications: {},
             eventDurations: {},
             mvcMR: 0,
             mvcML: 0,
@@ -330,6 +367,17 @@
             } if(heatMapRadio === 'ssd'){
                 await this.drawSSDHeatMap();
             }
+        },
+        saveJustification(key, value){
+            console.log("patch on db")
+            console.log(key, value)
+            this.eventJustifications[key].saved = true;
+        },
+        editJustification(key, value){
+            console.log("patch on db")
+            console.log(key, value)
+            this.eventJustifications[key].saved = false;
+
         },
         activateZoom() {
             this.zoomActive = !this.zoomActive;
@@ -853,6 +901,13 @@
                         console.log(key)
                         this.confirmedEvents[key] = events[key].confirmed;
                         this.eventTypes[key] = events[key].event_type;
+                        let saved;
+                        if(events[key].justification !== ''){
+                            saved = true;
+                        } else {
+                            saved = false;
+                        }
+                        this.eventJustifications[key] = {'justification': events[key].justification, 'saved': saved};
                         this.eventDurations[key] = {}
                         this.eventStatus[key] = events[key].status;
                         if(events[key].sensor === 'both'){
@@ -1133,14 +1188,14 @@
                 ],
                 grid: [
                     {
-                    left: 60,
-                    right: 50,
+                    left: 90,
+                    right: 70,
                     height: '40%',
                     bottom: 320
                     },
                     {
-                    left: 60,
-                    right: 50,
+                    left: 90,
+                    right: 70,
                     top: '55%',
                     height: '40%',
                     }
@@ -1551,9 +1606,22 @@
                         return `<b>Start (s)</b>: ${fiveMinInterval*60*5}<br><b>End (s)</b>: ${(fiveMinInterval*60*5)+(60*5)}`;
                     }
                 },
+                title: {
+                    text: 'Number of events', // Add a title for the visual maps
+                    right: '0%',  // Align it with the visual maps on the right
+                    top: '0%',      // Position the title just above the visual maps
+                    show: (Object.keys(this.predictions).length  > 0),
+                    textStyle: {
+                        fontSize: 12,
+                        fontWeight: 'bold'
+                    }
+                },
                 grid: {
-                    height: '50%',
-                    top: '10%'
+                    //height: '50%',
+                    top: '4%',
+                    left:50,
+                    right:120,
+                    bottom:40
                 },
                 xAxis: {
                     type: 'category',
@@ -1579,11 +1647,12 @@
                     min: 0,
                     max: Math.max(...data.map(item => item[2])),
                     seriesIndex: 0,
+                    text: ['high', 'low'],
                     calculable: (Object.keys(this.predictions).length  > 0),
                     show: (Object.keys(this.predictions).length  > 0),
-                    orient: 'horizontal',
-                    bottom: '20%',
-                    left: 'center'
+                    orient: 'vertical', // Set orientation to vertical
+                    right: '6%', // Position on the right side
+                    top: '4%', // Adjust top to control vertical spacing
                 },
                 {
                     dimension: 2,
@@ -1780,9 +1849,21 @@
                                 <b>Start (s)</b>: ${fiveMinInterval*60*5}<br><b>End (s)</b>: ${(fiveMinInterval*60*5)+(60*5)}`;
                     }
                 },
+                title: {
+                    text: 'Uncertainity level', // Add a title for the visual maps
+                    right: '0%',  // Align it with the visual maps on the right
+                    top: '0%',      // Position the title just above the visual maps
+                    textStyle: {
+                        fontSize: 14,
+                        fontWeight: 'bold'
+                    }
+                },
                 grid: {
-                    height: '50%',
-                    top: '10%'
+                    //height: '50%',
+                    top: '2%',
+                    left:50,
+                    right:150,
+                    bottom:40
                 },
                 xAxis: {
                     type: 'category',
@@ -1802,6 +1883,7 @@
                         show: true
                     }
                 },
+                /*
                 visualMap: [
                 {
                     type: 'continuous',
@@ -1823,7 +1905,7 @@
                     orient: 'horizontal',
                     left: 'center',
                     //bottom: '24%',
-                    botton: '5%'
+                    bottom: '10%'
                 },
                 {
                     type: 'continuous',
@@ -1845,7 +1927,7 @@
                     orient: 'horizontal',
                     left: 'center',
                     //bottom: '30%',
-                    bottom: '10%'
+                    bottom: '20%'
                 },
                 {
                     type: 'continuous',
@@ -1867,7 +1949,7 @@
                     orient: 'horizontal',
                     left: 'center',
                     //bottom: '30%',
-                    bottom:'20%'
+                    bottom:'30%'
                 },
                 {
                     dimension: 2,
@@ -1879,6 +1961,78 @@
                     }
                 }
                 ],
+                */
+                visualMap: [
+                    {
+                        type: 'continuous',
+                        dimension: 2,
+                        seriesIndex: 0,
+                        min: Math.min(...remData.map(item => item[2])), // Min value of HRV_SDNN for NREM
+                        max: Math.max(...remData.map(item => item[2])), // Max value of HRV_SDNN for NREM
+                        inRange: {
+                            color: ['#d916b9', '#dcabd4'] // Purple scale
+                        },
+                        //text: ["high uncertainty (high SD)", "low uncertainty (low SD)"],
+                        text: ["high", "low"],
+                        outOfRange: {
+                            color: 'transparent'
+                        },
+                        inverse: true,
+                        calculable: true,
+                        orient: 'vertical', // Set orientation to vertical
+                        right: '0.5%', // Position on the right side
+                        top: '4%', // Adjust top to control vertical spacing
+                    },
+                    {
+                        type: 'continuous',
+                        dimension: 2,
+                        seriesIndex: 1,
+                        min: Math.min(...lightData.map(item => item[2])), // Min value for REM
+                        max: Math.max(...lightData.map(item => item[2])), // Max value for REM
+                        inRange: {
+                            color: ['#12dada', '#c7e5e5'] // Blue scale for REM
+                        },
+                        text: ["high", "low"],
+                        outOfRange: {
+                            color: 'transparent'
+                        },
+                        inverse: true,
+                        calculable: true,
+                        orient: 'vertical', // Set orientation to vertical
+                        right: '14%', // Align it with the other visualMap
+                        top: '4%', // Adjust top to create space below the first visualMap
+                    },
+                    {
+                        type: 'continuous',
+                        dimension: 2,
+                        seriesIndex: 2,
+                        min: Math.min(...deepData.map(item => item[2])), // Min value for Deep
+                        max: Math.max(...deepData.map(item => item[2])), // Max value for Deep
+                        inRange: {
+                            color: ['#2b08b9', '#b1a8d8'] // Blue/purple scale for Deep
+                        },
+                        text: ["high", "low"],
+                        outOfRange: {
+                            color: 'transparent'
+                        },
+                        inverse: true,
+                        calculable: true,
+                        orient: 'vertical', // Set orientation to vertical
+                        right: '7%', // Align it with the other visualMap
+                        top: '4%', // Adjust top to create space below the second visualMap
+                    },
+                    {
+                        dimension: 2,
+                        seriesIndex: 3,
+                        calculable: false,
+                        show: false,
+                        inRange: {
+                            color: []
+                        }
+                    }
+                ],
+
+
                 series: [
                     {
                     name: 'REM data',
@@ -1998,3 +2152,33 @@
     }
   };
   </script>
+
+<style>
+.centered-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  margin-top: 0; /* Remove any top margin */
+  padding-top: 0; /* Remove padding at the top */
+}
+
+.image-selection {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0; /* Ensure no additional margin */
+}
+
+.selected-image-container {
+  margin-top: 0px; /* Minimal margin between image and selector */
+}
+
+#ec-heatmap, #ssd-heatmap {
+  width: 100%;
+  max-width: 600px;
+  height: 240px;
+  margin-top: 10px; /* Minimal margin */
+}
+</style>

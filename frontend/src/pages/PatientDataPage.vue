@@ -1,14 +1,7 @@
 <template>
-    <el-row>
-        <el-col :offset="4">
-            <UserTag />
-        </el-col>
-    </el-row>
-
-    <el-row justify="center" style="margin-bottom: 100px">
-        <el-col :span="10">
-            <PipelineStepper :step="0" />
-        </el-col>
+    <el-row style="margin-top: 10px;">
+        <el-col :span="1" :offset="4"><UserTag /></el-col>
+        <el-col :span="13" :offset="1"><PipelineStepper :step="1" /></el-col>
     </el-row>
 
     <el-row justify="center">
