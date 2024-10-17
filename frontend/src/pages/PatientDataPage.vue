@@ -1,9 +1,7 @@
 <template>
     <el-row>
         <el-col :offset="4">
-            <el-tag :type="userTypeTagType" size="large">
-                {{ userType.charAt(0).toUpperCase() + userType.slice(1) }}
-            </el-tag>
+            <UserTag />
         </el-col>
     </el-row>
 
@@ -62,38 +60,26 @@
 import PipelineStepper from '../components/PipelineStepper.vue'
 import axios from 'axios';
 import {ref} from 'vue'
-
+import UserTag from '../components/UserTag.vue';
 
 export default{
     name: 'PatientData',
     components: {
-        PipelineStepper
+        PipelineStepper,
+        UserTag
     },
     data () {
         return {
-            userType: '',
             activePanels: [],
             selectedFile: ref(''),
             patientsData: {},
-            userTypeTagType: "",
             loading: false
         }
     },
     async mounted(){
-        await this.getUserType();
         await this.getPatientsData();
     },
     methods: {
-        async getUserType(){
-            this.userType = this.$store.state.userType;
-
-            if(this.$store.state.userType === "advanced"){
-                this.userTypeTagType = "success"
-            } 
-            if(this.$store.state.userType === "basic"){
-                this.userTypeTagType = "warning"
-            }
-        },
         async getPatientsData(){
             const path = `http://127.0.0.1:5000/patients-data`
             const headers = {
@@ -122,7 +108,7 @@ export default{
             await axios.get(path, {headers})
                 .then(() => {
                     this.loading = false;
-
+                    console.log("Data downsampled")
                 })
                 .catch(err=>{
                     console.log(err)

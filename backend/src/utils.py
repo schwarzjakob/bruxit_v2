@@ -6,7 +6,7 @@ import os
 import re
 from collections import defaultdict
 import datetime
-from .models import NightDuration, MVC, Prediction, db
+from .models import NightDuration, MVC, Prediction, Settings, db
 import math
 from sklearn.preprocessing import MinMaxScaler
 import matplotlib
@@ -14,16 +14,15 @@ matplotlib.use('Agg')  # Use the non-GUI backend for Matplotlib
 import matplotlib.pyplot as plt
 import shutil
 
-data_path = 'C:/Users/eleon/Desktop/SDAP/backend/src/data/'
 
-def read_data_csv(p, w, f, cols):
-    data = pl.read_csv(data_path + f'p{p}_wk{w}/{f}', columns=cols)
+def get_settings():
+    return Settings.query.first()
 
-    return data
 
 def read_loc_csv(p, w, f):
+    data_path = get_settings().original_data_path
     f_short = f.rsplit('Fnorm.csv', 1)[0]
-    loc = pl.read_csv(data_path + f'p{p}_wk{w}/{f_short}location_Bites.csv')
+    loc = pl.read_csv(data_path + f'/p{p}_wk{w}/{f_short}location_Bites.csv')
 
     return loc
 
@@ -80,10 +79,6 @@ def find_mvc(signal_rms, loc):
             signal_mvc = signal_max_in_bite
 
         return signal_mvc
-    
-
-def downsample_data(signal, desired_sampling, original_sampling=2000, method="interpolation"):
-    return nk.signal_resample(signal, sampling_rate=original_sampling, desired_sampling_rate=desired_sampling, method=method)
 
 
 def parse_data_structure(base_dir):
@@ -102,7 +97,7 @@ def parse_data_structure(base_dir):
                 folder_path = os.path.join(root, dir_name)
                 night_files = [
                     f for f in os.listdir(folder_path) 
-                    if f.endswith('.csv') and not f.endswith('location_Bites.csv')
+                    if f.endswith('Fnorm.csv') and not f.endswith('location_Bites.csv')
                 ]
                 
                 for file_name in night_files:
@@ -145,7 +140,6 @@ def calculate_night_duration(patient_id, week, file_name, file_length, sampling_
     nigh_duration = NightDuration.query.filter_by(patient_id=patient_id, week=week, file=file_name, seconds=seconds, duration=duration).first()
 
     if nigh_duration is None:
-        # TODO: insert duration in DB
         night_duration = NightDuration(patient_id=patient_id, week=week, file=file_name, seconds=seconds, duration=duration)
 
         db.session.add(night_duration)
@@ -176,71 +170,14 @@ def convert_to_sample_indexes(x, y, data_length, sampling_rate):
     return start_id, end_id
 
 
-
-def preprocess_and_downsample_emg(patient_id, week, filename, df, loc, seconds, new_sampling_rate=256):
-    print("in preprocess_and downample function")
-    mr = pd.Series(df['MR'].to_list())
-    ml = pd.Series(df['ML'].to_list())
-
-    mr_rect = rectify_signal(mr)
-    ml_rect = rectify_signal(ml)
-
-    mr_rms = fast_rms(mr_rect)
-    ml_rms = fast_rms(ml_rect)
-
-    mr_mvc = find_mvc(mr_rms, loc)
-    ml_mvc = find_mvc(ml_rms, loc)
-
-    print(mr_mvc)
-    print(type(mr_mvc))
-
-    mr_mvc_db = MVC(patient_id=patient_id, week=week, file=filename, sensor='MR', mvc=mr_mvc.item())
-    ml_mvc_db = MVC(patient_id=patient_id, week=week, file=filename, sensor='ML', mvc=ml_mvc.item())
-
-    db.session.add(mr_mvc_db)
-    db.session.add(ml_mvc_db)
-
-    db.session.commit()
-
-    mr_downsampled = downsample_data(mr_rms, desired_sampling=new_sampling_rate)
-    ml_downsampled = downsample_data(ml_rms, desired_sampling=new_sampling_rate)
-
-    print(len(mr_downsampled))
-
-    #emg_time = np.linspace(0, seconds, int(seconds * new_sampling_rate), endpoint=False)  # Time vector
-
-    print(f"mr: {len(mr_downsampled.tolist())}")
-    print(f"mr: {len(mr_downsampled.tolist())}")
-
-    #result = pd.DataFrame(data={'MR': mr_downsampled.tolist(), 'ML': ml_downsampled.tolist(), 'EMG_t': emg_time.tolist()})
-    result = pd.DataFrame(data={'MR': mr_downsampled.tolist(), 'ML': ml_downsampled.tolist()})
-    print(result)
-
-    path = f"C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled/p{patient_id}_wk{week}"
-    if not os.path.exists(path):
-        print("not exist")
-        os.makedirs(path)
-    result.to_csv(path + f'/{filename}_emg_{new_sampling_rate}Hz.csv')
-
-
-
-def get_5_min_emg(df, seconds):
-    mr = pd.Series(df['MR'].to_list())
-    ml = pd.Series(df['ML'].to_list())
-
-    emg_time = np.linspace(0, seconds, int(seconds * 256), endpoint=False)  # Time vector
-
-    print(f"len mr: {len(mr.tolist())}")
-    print(f"len ml: {len(ml.tolist())}")
-    print(f"len time: {len(emg_time.tolist())}")
-
-    result = {'MR': mr.tolist(), 'ML': ml.tolist(), 'EMG_t': emg_time.tolist()}
-
-    return result
-
 def generate_night_images(patient_id, week, file, mr, ml, predictions):
     # Create output directory for plots
-    output_dir = f"C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv_images/"
+    downsampled_data_path = get_settings().downsampled_data_path
+    emg_right_name = get_settings().emg_right_name # 'MR'
+    emg_left_name = get_settings().emg_left_name # 'ML'
+    minimum_sampling_rate = get_settings().minimum_sampling_rate # 200
+
+    output_dir = f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv_images/"
     #os.makedirs(output_dir, exist_ok=True)
 
 
@@ -249,14 +186,14 @@ def generate_night_images(patient_id, week, file, mr, ml, predictions):
     os.makedirs(output_dir)
 
     # Whole Night Plot
-    sleep_cycle_step = 1080000 / 200  # Sleep cycle step in seconds
-    sleep_cycles = math.ceil(len(mr) / (200 * 90 * 60))  # Number of sleep cycles
+    sleep_cycle_step = 90*60  # Sleep cycle step in seconds
+    sleep_cycles = math.ceil(len(mr) / (minimum_sampling_rate * 90 * 60))  # Number of sleep cycles
     plt.figure(figsize=(25, 10))
     plt.title("Whole Night Signal")
-    time_steps = np.linspace(0, len(mr) / 200, len(mr))
+    time_steps = np.linspace(0, len(mr) / minimum_sampling_rate, len(mr))
     
-    plt.plot(time_steps, mr, color="blue", alpha=0.7, label="MR")
-    plt.plot(time_steps, ml, color="red", alpha=0.5, label="ML")
+    plt.plot(time_steps, mr, color="blue", alpha=0.7, label=emg_right_name)
+    plt.plot(time_steps, ml, color="red", alpha=0.5, label=emg_left_name)
     plt.axvline(x=0, color="black")
 
     j = sleep_cycle_step
@@ -300,7 +237,7 @@ def generate_night_images(patient_id, week, file, mr, ml, predictions):
 
     # Sleep Cycle Plots
     sleep_cycle_duration_s = 90 * 60  # Duration of one sleep cycle in seconds
-    samples_per_cycle = sleep_cycle_duration_s * 200  # Total samples per sleep cycle
+    samples_per_cycle = sleep_cycle_duration_s * minimum_sampling_rate  # Total samples per sleep cycle
 
     start_x_axis = 0
     end_x_axis = sleep_cycle_duration_s
@@ -394,15 +331,11 @@ def get_continuous_features(features, idx, data_length=None):
     start_time = 60*5*idx
     end_time = start_time + 60*5
     print(start_time, end_time)
-    #print(features)
-    
-    #filtered = features.filter(
-    #    (pl.col('start_time') >= start_time) & (pl.col('end_time') <= end_time)
-    #)
+
     filtered = features.filter(
         ((pl.col('start_time') >= start_time) | (pl.col('end_time') > start_time)) & ((pl.col('end_time') <= end_time) | (pl.col('start_time') < end_time))
     ) 
-    #print(filtered)
+
     continuous_features = {'std_mr': [], 'std_ml': [], 'var_mr': [], 'var_ml': [], 'mnf_mr': [], 'mnf_ml': [], 'mdf_mr': [], 'mdf_ml': [], 'HRV_mean': [], 'HRV_median': [], 'HRV_sdnn': [], 'HRV_lf_hf': [], 'RRI': []}
     count = 0
     if len(filtered) == 0:
@@ -453,8 +386,8 @@ def get_continuous_features(features, idx, data_length=None):
 
 def get_new_event_metrics(patient_id, week, file, start_s, end_s):
     print("take features from where the event locates")
-    path = 'C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled'
-    features = pl.read_csv(f"{path}/p{patient_id}_wk{week}/{file[:-4]}200Hz_features.csv")
+    downsampled_data_path = get_settings().downsampled_data_path
+    features = pl.read_csv(f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz_features.csv")
 
     features_event = features.filter(
         ((pl.col('start_time') >= start_s) | (pl.col('end_time') > start_s)) & ((pl.col('end_time') <= end_s) | (pl.col('start_time') < end_s))
@@ -463,6 +396,7 @@ def get_new_event_metrics(patient_id, week, file, start_s, end_s):
     features_event_mean = features_event.mean()[:,2:]
 
     return features_event_mean
+
 
 def add_new_prediction(patient_id, week, file, start_s, end_s, justification, name, metrics):
     new_prediction = Prediction(patient_id=patient_id, week=week, file=file, name=name, start_s=start_s, end_s=end_s,
@@ -485,6 +419,7 @@ def add_new_prediction(patient_id, week, file, start_s, end_s, justification, na
 
     db.session.add(new_prediction)
     db.session.commit()
+
 
 # Prediction functions
 def calculate_hrv(ecg_90s):
@@ -624,6 +559,12 @@ def extend_df_with_rri(df_sliding, df_rr):
 
 
 def extract_features_for_prediction(sensor_data, window_size_emg_s=1, overlap_emg_s=0.5, window_size_ecg_s=90, overlap_ecg_s=45, sampling_rate=200):
+    emg_right_name = get_settings().emg_right_name # 'MR'
+    emg_left_name = get_settings().emg_left_name # 'ML'
+    ecg_name = get_settings().ecg_name # 'ECG
+
+    minimum_sampling_rate = get_settings().minimum_sampling_rate
+
     window_size_emg = int(window_size_emg_s * sampling_rate)
     window_size_ecg = int(window_size_ecg_s * sampling_rate)
     overlap_emg = int(overlap_emg_s * sampling_rate)
@@ -635,14 +576,14 @@ def extract_features_for_prediction(sensor_data, window_size_emg_s=1, overlap_em
     scaler_mr = MinMaxScaler(feature_range=(0,100))
     scaler_ml = MinMaxScaler(feature_range=(0,100))
 
-    ecg_data = sensor_data['ECG'].values
-    mr_data = pd.DataFrame(scaler_mr.fit_transform(sensor_data[["MR"]]), columns=["MR"])['MR'].values
-    ml_data = pd.DataFrame(scaler_ml.fit_transform(sensor_data[["ML"]]), columns=["ML"])['ML'].values
+    ecg_data = sensor_data[ecg_name].values
+    mr_data = pd.DataFrame(scaler_mr.fit_transform(sensor_data[[emg_right_name]]), columns=[emg_right_name])[emg_right_name].values
+    ml_data = pd.DataFrame(scaler_ml.fit_transform(sensor_data[[emg_left_name]]), columns=[emg_left_name])[emg_left_name].values
     
     mr_threshold = np.mean(mr_data) + 3 * np.std(mr_data)
     ml_threshold = np.mean(ml_data) + 3 * np.std(ml_data)
 
-    print("seconds: ", len(sensor_data)/200)
+    print("seconds: ", len(sensor_data)/minimum_sampling_rate)
 
     for i in range(window_size_emg, len(sensor_data), overlap_emg):
         # print(i, len(sensor_data))

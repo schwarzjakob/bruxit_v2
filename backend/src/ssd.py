@@ -50,7 +50,7 @@ def get_ako_ranges():
         'nrem': {'min':0.72, 'median': (2.59-0.72)/2, 'max': 2.59},
         'rem': {'min': 2.51-0.17, 'median': 2.51 , 'max': 2.51+0.17}
     }
-
+"""
 
 # TODO: talk with Gabi, Vera, Barbara about this
 def categorize_sleep_stage(value):
@@ -67,6 +67,45 @@ def categorize_sleep_stage(value):
         stage = "rem"
 
     return stage
+"""
+def categorize_sleep_stage(lf_hf_ratio):
+    # Ranges from Ako et al. paper
+    light_sleep_range = (1.76, 2.59)
+    deep_sleep_range = (0.72, 1.00)
+    rem_sleep_range = (2.34, 2.68)
+    
+    # Handle the overlapping range between REM and light sleep
+    if rem_sleep_range[0] <= lf_hf_ratio <= light_sleep_range[1]:
+        # Calculate the distance to REM and Light Sleep
+        dist_to_light_sleep = min(abs(lf_hf_ratio - light_sleep_range[0]), abs(lf_hf_ratio - light_sleep_range[1]))
+        dist_to_rem_sleep = min(abs(lf_hf_ratio - rem_sleep_range[0]), abs(lf_hf_ratio - rem_sleep_range[1]))
+        
+        # Assign to the category with the closest distance
+        if dist_to_rem_sleep < dist_to_light_sleep:
+            return "rem"
+        else:
+            return "light"
+    
+    elif deep_sleep_range[0] <= lf_hf_ratio <= deep_sleep_range[1]:
+        return "deep"
+    else:
+        # If out of range, assign to the closest category
+        # Compute distances to the nearest boundary of each range
+        dist_to_deep_sleep = min(abs(lf_hf_ratio - deep_sleep_range[0]), abs(lf_hf_ratio - deep_sleep_range[1]))
+        dist_to_light_sleep = min(abs(lf_hf_ratio - light_sleep_range[0]), abs(lf_hf_ratio - light_sleep_range[1]))
+        dist_to_rem_sleep = min(abs(lf_hf_ratio - rem_sleep_range[0]), abs(lf_hf_ratio - rem_sleep_range[1]))
+        
+        # Find the minimum distance
+        min_distance = min(dist_to_deep_sleep, dist_to_light_sleep, dist_to_rem_sleep)
+        
+        # Assign category based on the closest distance
+        if min_distance == dist_to_deep_sleep:
+            return "deep"
+        elif min_distance == dist_to_rem_sleep:
+            return "rem"
+        else:
+            return "light"
+
 
 def find_selected_tiles(value):
     if value == 'rem':
@@ -74,6 +113,30 @@ def find_selected_tiles(value):
     else:
         return False
 
+def HRV_analysis(patient_id, week, file, sampling_rate):
+    file_path = f"C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv"
+    ecg = pl.read_csv(file_path, columns=["ECG"])
+
+    ecg_clean = nk.ecg_clean(ecg, sampling_rate=sampling_rate)
+    ecg_peaks = nk.ecg_findpeaks(ecg_clean, sampling_rate=sampling_rate)
+    info, r_peaks_corrected = nk.signal_fixpeaks(ecg_peaks, sampling_rate=sampling_rate, iterative=False, show=False, method="Kubios")
+
+    # Calculate HRV metrics
+    hrv = compute_HRV_metrics(r_peaks_corrected, sampling_rate)
+
+    hrv_cut = hrv[['HRV_LFHF','HRV_SDNN']]
+
+    hrv_with_coords = add_matrix_coordinates(hrv_cut)
+
+    hrv_with_coords['stage'] = hrv_with_coords['HRV_LFHF'].apply(categorize_sleep_stage)
+
+    # Add sleep stage detection to DB
+    add_SSD_to_db(patient_id, week, file, hrv_with_coords)
+
+    print(hrv_with_coords)
+    
+
+    return hrv_with_coords.to_json(orient='records')
 
 
 
@@ -131,7 +194,7 @@ def return_HRV_analysis(patient_id, week_id, filename, sampling_rate):
 
 def add_SSD_to_db(patient_id, week_id, filename, df):
     for index, row in df.iterrows():
-        ssd = SSD(patient_id=patient_id, week=week_id, file=filename, x=row['x'], y=row['y'], HRV_LFHF=row['HRV_LFHF'], HRV_SDNN=row['HRV_SDNN'], stage=row['stage'], selected=row['selected'])
+        ssd = SSD(patient_id=patient_id, week=week_id, file=filename, x=row['x'], y=row['y'], HRV_LFHF=row['HRV_LFHF'], HRV_SDNN=row['HRV_SDNN'], stage=row['stage'])
 
         db.session.add(ssd)
         db.session.commit()

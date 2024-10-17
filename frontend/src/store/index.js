@@ -18,7 +18,6 @@ const store = createStore({
       file: '',
       fileSize: 0.0,
       userType: '',
-      settingsSaved: false,
       thresholdMr: 10,
       thresholdMl: 10
     }
@@ -32,9 +31,7 @@ const store = createStore({
     setUserType(state, userType) {
       state.userType = userType;
     },
-    setSettingsSaved(state, settingsSaved){
-      state.settingsSaved= settingsSaved;
-    },
+
     setPatientId(state, patientId){
       state.patientId = patientId;
     },

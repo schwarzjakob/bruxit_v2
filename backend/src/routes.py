@@ -1,5 +1,5 @@
 from flask import Blueprint, request, send_from_directory, abort, jsonify
-from .models import Threshold, NightDuration, SSD, MVC, Prediction, db
+from .models import Threshold, NightDuration, SSD, MVC, Prediction, Settings, db
 from .utils import *
 from .ssd import *
 import psycopg2
@@ -17,11 +17,48 @@ from sklearn.preprocessing import MinMaxScaler
 main = Blueprint('main', __name__)
 
 
+@main.route('/settings', methods=['GET', 'POST'])
+def settings():
+    if request.method == "GET":
+        settings = Settings.query.first()
+
+        if settings:
+            result = {"emgRight": settings.emg_right_name, "emgLeft": settings.emg_left_name, "ecg": settings.ecg_name, 
+                    "modelFileName": settings.model_file_name, "originalDataPath": settings.original_data_path,
+                    "downsampledDataPath": settings.downsampled_data_path, "modelPath": settings.model_path,
+                    "originalSamplingRate": settings.original_sampling_rate, "minimumSamplingRate": settings.minimum_sampling_rate}
+        else:
+            result = {}
+
+        return result, 200
+
+    if request.method == "POST":
+        Settings.query.delete()
+        emg_right_name = request.json["emgRight"]
+        emg_left_name = request.json["emgLeft"]
+        ecg_name = request.json["ecg"]
+        model_file_name = request.json["modelFileName"]
+        original_data_path = request.json["originalDataPath"]
+        downsampled_data_path = request.json["downsampledDataPath"]
+        model_path = request.json["modelPath"]
+        original_sampling_rate = request.json["originalSamplingRate"]
+        minimum_sampling_rate = request.json["minimumSamplingRate"]
+
+        settings = Settings(emg_right_name=emg_right_name, emg_left_name=emg_left_name, ecg_name=ecg_name, model_file_name=model_file_name,
+                            original_data_path=original_data_path, downsampled_data_path=downsampled_data_path, model_path=model_path,
+                            original_sampling_rate=original_sampling_rate, minimum_sampling_rate=minimum_sampling_rate)
+        
+        db.session.add(settings)
+        db.session.commit()
+
+        return "Settings updated successfully", 200
+
+
 
 @main.route('/patients-data', methods=['GET'])
 def get_patient_data():
-    base_dir="C:/Users/eleon/Desktop/SDAP/backend/src/data"
-    result = parse_data_structure(base_dir)
+    original_data_path = get_settings().original_data_path
+    result = parse_data_structure(original_data_path)
     sorted_result = sort_data_structure(result)
 
     return sorted_result, 200
@@ -41,38 +78,12 @@ def get_ssd(patient_id, week, filename, sampling_rate):
     return ssd, 200
 
 
-@main.route('/selected-intervals/<int:patient_id>/<string:week>/<string:filename>', methods=['POST'])
-def selected_intervals(patient_id, week, filename):
-    """
-    payload:
-        {
-            'x': int,
-            'y': int,
-
-        }
-    """
-    selected_intervals = request.json
-
-    # The condition - update all users with the name 'John'
-    SSD_to_update = SSD.query.filter_by(patient_id=patient_id, week=week, file=filename)
-    
-    # Update the 'active' column to False for all these users
-    SSD_to_update.update({'selected': False})
-    
-
-    for selected_interval in selected_intervals:
-        update_row = SSD.query.filter_by(patient_id=patient_id, week=week, file=filename, x=selected_interval['x'], y=selected_interval['y'])
-        update_row.update({'selected': True})
-
-    # Commit the transaction
-    db.session.commit()
-
-    return "Selected intervals updated.", 200
-
 
 @main.route('/patient-threshold/<int:patient_id>/<string:week>/<string:file>', methods=['GET', 'POST'])
-def post_patient_threshold(patient_id, week, file):
+def patient_threshold(patient_id, week, file):
     if request.method == 'GET':
+        emg_right_name = get_settings().emg_right_name # 'MR'
+        emg_left_name = get_settings().emg_left_name # 'ML'
         threshold_db = Threshold.query.filter_by(patient_id=patient_id, week=week, file=file).all()
         if threshold_db:
             result = {}
@@ -81,16 +92,16 @@ def post_patient_threshold(patient_id, week, file):
                     result[tr.sensor] = tr.threshold
             
             if len(threshold_db) == 1:
-                if threshold_db[0].sensor == "MR":
-                    result["MR"] = threshold_db[0].threshold
-                    result["ML"] = 10
+                if threshold_db[0].sensor == emg_right_name:
+                    result[emg_right_name] = threshold_db[0].threshold
+                    result[emg_left_name] = 10
                 
-                if threshold_db[0].sensor == "ML":
-                    result["ML"] = threshold_db[0].threshold
-                    result["MR"] = 10
+                if threshold_db[0].sensor == emg_left_name:
+                    result[emg_left_name] = threshold_db[0].threshold
+                    result[emg_right_name] = 10
 
         else:
-            result = {'MR': 10, 'ML': 10}
+            result = {emg_right_name: 10, emg_left_name: 10}
         
         return result, 200
 
@@ -121,22 +132,26 @@ def post_patient_threshold(patient_id, week, file):
 
 @main.route('/get-emg/<int:patient_id>/<string:week>/<string:file>/<float:idx>',  methods=['GET'])
 def get_emg(patient_id, week, file, idx):
-    data_path = 'C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled'
+    downsampled_data_path = get_settings().downsampled_data_path
+    minimum_sampling_rate = get_settings().minimum_sampling_rate # 200
+    emg_right_name = get_settings().emg_right_name # 'MR'
+    emg_left_name = get_settings().emg_left_name # 'ML'
+    
     start = time.time()
 
     total_seconds = NightDuration.query.filter_by(patient_id=patient_id, week=week, file=file).first().seconds
     print(total_seconds)
-    data_length = int(total_seconds * 200)
+    data_length = int(total_seconds * minimum_sampling_rate)
 
-    start_id = int(200 * 60 * 5 * idx)
-    end_id = start_id + 200*60*5
+    start_id = int(minimum_sampling_rate * 60 * 5 * idx)
+    end_id = start_id + minimum_sampling_rate*60*5
 
     print("open file")
-    data = pl.read_csv(f"{data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv",columns=['MR', 'ML'], skip_rows_after_header=start_id, n_rows=end_id-start_id)
-    features = pl.read_csv(f"{data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz_features.csv")
+    data = pl.read_csv(f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv",columns=[emg_right_name, emg_left_name], skip_rows_after_header=start_id, n_rows=end_id-start_id)
+    features = pl.read_csv(f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz_features.csv")
 
-    mr = pd.Series(data['MR'].to_list())
-    ml = pd.Series(data['ML'].to_list())
+    mr = pd.Series(data[emg_right_name].to_list())
+    ml = pd.Series(data[emg_left_name].to_list())
 
     # Rectify
     print("rectify the signal")
@@ -144,22 +159,22 @@ def get_emg(patient_id, week, file, idx):
     ml_rect = rectify_signal(ml)
 
     print("calculate rms")
-    mr_rms = rms(mr_rect)
-    ml_rms = rms(ml_rect)
+    mr_rms = rms(mr_rect, sampling=minimum_sampling_rate)
+    ml_rms = rms(ml_rect, sampling=minimum_sampling_rate)
 
     print(mr_rms)
 
     num_samples = len(mr_rms)
     if end_id >= data_length:
         print("last window")
-    start_time = start_id / 200  # Convert start index to seconds (since original is at 2000 Hz)
+    start_time = start_id / minimum_sampling_rate  # Convert start index to seconds (since original is at 2000 Hz)
     
-    emg_time = np.linspace(start_time, start_time + num_samples / 200, num_samples, endpoint=False)
+    emg_time = np.linspace(start_time, start_time + num_samples / minimum_sampling_rate, num_samples, endpoint=False)
 
     continuous_features = get_continuous_features(features, idx, data_length=len(mr_rms))
     print("len features: ")
     print(len(continuous_features['std_mr']))
-    result = {'MR': mr_rms.tolist(), 'ML': ml_rms.tolist(), 'EMG_t': emg_time.tolist()}
+    result = {emg_right_name: mr_rms.tolist(), emg_left_name: ml_rms.tolist(), 'EMG_t': emg_time.tolist()}
     end = time.time()
 
     print(f"{end-start} seconds taken.")
@@ -167,59 +182,6 @@ def get_emg(patient_id, week, file, idx):
 
     return result | continuous_features, 200
 
-
-"""
-
-@main.route('/get-emg/<int:patient_id>/<string:week>/<string:file>/<int:idx>',  methods=['GET'])
-def get_emg(patient_id, week, file, idx):
-    data_path = 'C:/Users/eleon/Desktop/SDAP/backend/src/data/'
-    start = time.time()
-    start_id = 2000 * 60 * 5 * idx
-    end_id = start_id + 2000*60*5
-
-    print("open file")
-    data = pl.read_csv(f"{data_path}/p{patient_id}_wk{week}/{file}",columns=['MR', 'ML'], skip_rows_after_header=start_id, n_rows=end_id-start_id)
-    loc = read_loc_csv(patient_id, week, file)
-
-
-    mr = pd.Series(data['MR'].to_list())
-    ml = pd.Series(data['ML'].to_list())
-
-    # Rectify
-    print("rectify the signal")
-    mr_rect = rectify_signal(mr)
-    ml_rect = rectify_signal(ml)
-
-    print("calculate rms")
-    mr_rms = rms(mr_rect)
-    ml_rms = rms(ml_rect)
-
-    print(mr_rms)
-
-    print("find mvc")
-    mr_mvc = find_mvc(mr_rms, loc)
-    ml_mvc = find_mvc(ml_rms, loc)
-
-    print("downsample data")
-    mr_downsampled = downsample_data(mr_rms, desired_sampling=256)
-    ml_downsampled = downsample_data(ml_rms, desired_sampling=256)
-
-     # Generate the time vector based on the downsampled data length and start_index
-    num_samples = len(mr_downsampled)
-    start_time = start_id / 2000  # Convert start index to seconds (since original is at 2000 Hz)
-    
-    emg_time = np.linspace(start_time, start_time + num_samples / 256, num_samples, endpoint=False)
-
-
-    result = {'MR': mr_downsampled.tolist(), 'ML': ml_downsampled.tolist(), 'EMG_t': emg_time.tolist(), 'MR_mvc': mr_mvc, 'ML_mvc': ml_mvc}
-    end = time.time()
-
-    print(f"{end-start} seconds taken.")
-    # print(result)
-
-    return result, 200
-
-"""
 
 @main.route('/night-duration/<int:patient_id>/<string:week>/<string:file>', methods=['GET'])
 def get_night_duration(patient_id, week, file):
@@ -235,8 +197,11 @@ def get_night_duration(patient_id, week, file):
 
 @main.route('/mvc/<int:patient_id>/<string:week>/<string:file>', methods=['GET'])
 def get_mvc(patient_id, week, file):
-    mvc_mr = MVC.query.filter_by(patient_id=patient_id, week=week, file=file, sensor="MR").first()
-    mvc_ml = MVC.query.filter_by(patient_id=patient_id, week=week, file=file, sensor="ML").first()
+    emg_right_name = get_settings().emg_right_name # 'MR'
+    emg_left_name = get_settings().emg_left_name # 'ML'
+
+    mvc_mr = MVC.query.filter_by(patient_id=patient_id, week=week, file=file, sensor=emg_right_name).first()
+    mvc_ml = MVC.query.filter_by(patient_id=patient_id, week=week, file=file, sensor=emg_left_name).first()
 
     if mvc_mr is None or mvc_ml is None:
         return "No MVC for this night.", 404
@@ -246,15 +211,22 @@ def get_mvc(patient_id, week, file):
 
 @main.route('/downsample-data/<int:patient_id>/<string:week>/<string:file>', methods=['GET'])
 def downsample_data(patient_id, week, file):
-    path_resampled_data = 'C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled'
-    path_data = 'C:/Users/eleon/Desktop/SDAP/backend/src/data'
+    original_data_path = get_settings().original_data_path
+    downsampled_data_path = get_settings().downsampled_data_path
 
-    if os.path.isfile(f"{path_resampled_data}/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv"):
+    emg_right_name = get_settings().emg_right_name # 'MR'
+    emg_left_name = get_settings().emg_left_name # 'ML'
+    ecg_name = get_settings().ecg_name # 'ECG'
+
+    original_sampling_rate = get_settings().original_sampling_rate # 2000
+    minimum_sampling_rate = get_settings().minimum_sampling_rate # 200
+
+    if os.path.isfile(f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv"):
         return "Data already downsampled", 200
     
     else:
         print("Open datasets")
-        data = pl.read_csv(f"{path_data}/p{patient_id}_wk{week}/{file}", columns=["MR", "ML", "ECG"])
+        data = pl.read_csv(f"{original_data_path}/p{patient_id}_wk{week}/{file}", columns=[emg_right_name, emg_left_name, ecg_name])
         loc = read_loc_csv(patient_id, week, file)
 
         # Check that there are no null values in the recording
@@ -272,11 +244,11 @@ def downsample_data(patient_id, week, file):
             # Fill null values
             data = data.with_columns(pl.all().fill_null(strategy='backward'))
 
-        mr = data.get_column("MR")
-        ml = data.get_column("ML")
-        ecg = data.get_column("ECG")
+        mr = data.get_column(emg_right_name)
+        ml = data.get_column(emg_left_name)
+        ecg = data.get_column(ecg_name)
 
-        calculate_night_duration(patient_id, week, file, len(mr), sampling_rate=2000)
+        calculate_night_duration(patient_id, week, file, len(mr), sampling_rate=original_sampling_rate)
 
         print("Extract MVC")
 
@@ -295,31 +267,31 @@ def downsample_data(patient_id, week, file):
         ml_rect = pd.DataFrame(ml_rect)
 
         print("calculate rms")
-        mr_rms = rms(mr_rect, sampling=2000)
-        ml_rms = rms(ml_rect, sampling=2000)
+        mr_rms = rms(mr_rect, sampling=original_sampling_rate)
+        ml_rms = rms(ml_rect, sampling=original_sampling_rate)
 
         print("find mvc")
         mr_mvc = find_mvc(mr_rms, loc)
         ml_mvc = find_mvc(ml_rms, loc)
 
         print("save mvc to db")
-        mr_mvc_db = MVC(patient_id=patient_id, week=week, file=file, sensor='MR', mvc=mr_mvc.item())
-        ml_mvc_db = MVC(patient_id=patient_id, week=week, file=file, sensor='ML', mvc=ml_mvc.item())
+        mr_mvc_db = MVC(patient_id=patient_id, week=week, file=file, sensor=emg_right_name, mvc=mr_mvc.item())
+        ml_mvc_db = MVC(patient_id=patient_id, week=week, file=file, sensor=emg_left_name, mvc=ml_mvc.item())
         db.session.add(mr_mvc_db)
         db.session.add(ml_mvc_db)
 
         db.session.commit()
 
-        mr_ds = nk.signal_resample(mr, sampling_rate=2000, desired_sampling_rate=200)
-        ml_ds = nk.signal_resample(ml, sampling_rate=2000, desired_sampling_rate=200)
-        ecg_ds = nk.signal_resample(ecg, sampling_rate=2000, desired_sampling_rate=200)
+        mr_ds = nk.signal_resample(mr, sampling_rate=original_sampling_rate, desired_sampling_rate=minimum_sampling_rate)
+        ml_ds = nk.signal_resample(ml, sampling_rate=original_sampling_rate, desired_sampling_rate=minimum_sampling_rate)
+        ecg_ds = nk.signal_resample(ecg, sampling_rate=original_sampling_rate, desired_sampling_rate=minimum_sampling_rate)
 
-        new_df = pd.DataFrame({'MR': mr_ds, 'ML': ml_ds, 'ECG': ecg_ds})
+        new_df = pd.DataFrame({emg_right_name: mr_ds, emg_left_name: ml_ds, ecg_name: ecg_ds})
 
-        if not os.path.exists(f'{path_resampled_data}/p{patient_id}_wk{week}'):
-            os.makedirs(f'{path_resampled_data}/p{patient_id}_wk{week}')
+        if not os.path.exists(f'{downsampled_data_path}/p{patient_id}_wk{week}'):
+            os.makedirs(f'{downsampled_data_path}/p{patient_id}_wk{week}')
 
-        new_df.to_csv(f"{path_resampled_data}/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv")
+        new_df.to_csv(f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv")
 
         return "Data downsampled and saved correctly.", 200
 
@@ -357,14 +329,17 @@ def patch_confirmed_events(patient_id, week, file):
 
 @main.route('/prediction-sensors/<int:patient_id>/<string:week>/<string:file>/', methods=['PATCH'])
 def patch_prediction_sensors(patient_id, week, file):
+    emg_right_name = get_settings().emg_right_name # 'MR'
+    emg_left_name = get_settings().emg_left_name # 'ML'
+    
     update = request.json
     print(update)
     sensor = update['sensor']
 
     # sensor = update['sensor']
-    if set(sensor) == set(['ML']): sensor = 'ML'
-    if set(sensor) == set(['MR']): sensor = 'MR'
-    if set(sensor) == set(['ML', 'MR']): sensor = 'both' 
+    if set(sensor) == set([emg_left_name]): sensor = emg_left_name
+    if set(sensor) == set([emg_right_name]): sensor = emg_right_name
+    if set(sensor) == set([emg_left_name, emg_right_name]): sensor = 'both' 
 
     prediction_to_update = Prediction.query.filter_by(patient_id=patient_id, week=week, file=file, name=update['name']).first()
     prediction_to_update.sensor = sensor
@@ -387,15 +362,18 @@ def patch_prediction_event_type(patient_id, week, file):
 
 @main.route('/night-images/<int:patient_id>/<string:week>/<string:file>/<string:version>', methods=['GET'])
 def get_night_images(patient_id, week, file, version):
-    path = 'C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled'
+    #path = 'C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled'
+    downsampled_data_path = get_settings().downsampled_data_path
+    emg_right_name = get_settings().emg_right_name # 'MR'
+    emg_left_name = get_settings().emg_left_name # 'ML'
 
     # List the generated images from the directory
-    output_dir = path + f"/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv_images"
+    output_dir = downsampled_data_path + f"/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv_images"
     if not os.path.exists(output_dir) or version=="new":
         #return jsonify({"error": "No images found"}), 404
-        data = pl.read_csv(path + f"/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv",columns=['MR', 'ML'])
-        mr = data.get_column("MR")
-        ml = data.get_column("ML")
+        data = pl.read_csv(downsampled_data_path + f"/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv",columns=[emg_right_name, emg_left_name])
+        mr = data.get_column(emg_right_name)
+        ml = data.get_column(emg_left_name)
 
         predictions = Prediction.query.filter_by(patient_id=patient_id, week=week, file=file).all()
         print(predictions)
@@ -423,9 +401,9 @@ def get_night_images(patient_id, week, file, version):
 
 @main.route('/image/<int:patient_id>/<string:week>/<string:file>/<string:img>', methods=['GET'])
 def serve_image(patient_id, week, file, img):
-    path = 'C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled/'
+    downsampled_data_path = get_settings().downsampled_data_path
 
-    folder_path = path + f'p{patient_id}_wk{week}/{file[:-4]}200Hz.csv_images/'
+    folder_path = downsampled_data_path + f'/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv_images/'
     print(folder_path + img)
     if os.path.exists(folder_path + img):
         return send_from_directory(folder_path, img)
@@ -438,30 +416,33 @@ def predict_events(patient_id, week, file):
     print(predictions)
 
     if request.method == 'GET':
-        path = 'C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled'
-        model_name = 'brazil_model_features_new_2.json'
-        #sensor_data = read_data_csv(patient_id, week, file, ['ECG', 'MR', 'ML'])
+        downsampled_data_path = get_settings().downsampled_data_path
+        model_path = get_settings().model_path
+
+        minimum_sampling_rate = get_settings().minimum_sampling_rate # 200
+
+        model_file_name = get_settings().model_file_name
 
         if not predictions:
 
-            if os.path.isfile(f"{path}/p{patient_id}_wk{week}/{file[:-4]}200Hz_features.csv"):
-                features = pd.read_csv(f"{path}/p{patient_id}_wk{week}/{file[:-4]}200Hz_features.csv")
+            if os.path.isfile(f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz_features.csv"):
+                features = pd.read_csv(f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz_features.csv")
 
                 times = features.iloc[:, 1:3]
                 features = features.iloc[:, 3:43]
 
             else:
-                sensor_data = pd.read_csv(f"{path}/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv")
-                features = extract_features_for_prediction(sensor_data)
+                sensor_data = pd.read_csv(f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv")
+                features = extract_features_for_prediction(sensor_data, sampling_rate=minimum_sampling_rate)
 
-                features.to_csv(f"{path}/p{patient_id}_wk{week}/{file[:-4]}200Hz_features.csv")
+                features.to_csv(f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz_features.csv")
 
                 times = features.iloc[:, 0:2]
                 features = features.iloc[:, 2:42]
 
             # Load model
             loaded_model = xgb.XGBClassifier()
-            loaded_model.load_model(f"C:/Users/eleon/Desktop/SDAP/backend/src/data_brazil/{model_name}")
+            loaded_model.load_model(f"{model_path}/{model_file_name}")
 
             y_pred = loaded_model.predict(features)  
 
@@ -627,128 +608,4 @@ def predict_events(patient_id, week, file):
                 add_new_prediction(patient_id, week, file, start_s, end_s, justification, name, metrics)
 
         return "Post event added by expert.", 200
-
-
-
-
-    
-
-
-
-@main.route('/insert-night/<int:patient_id>/<string:week>/<string:night_id>/<string:recorder>', methods=['POST'])
-def insert_night(patient_id, week, night_id, recorder):
-
-    uri = "postgresql://epura:29091998@localhost:5433/sdap"
-
-    df = read_data_csv(patient_id, week, night_id, recorder, ['MR', 'ML', 'ECG'])
-
-    df = df.with_columns(
-        patient_id = pl.lit(patient_id),
-        week=pl.lit(week),
-        night_id=pl.lit(night_id),
-        recorder=pl.lit(recorder)
-    )
-    df = df.with_columns(pl.arange(0, df.height).alias("data_point"))
-
-    df.write_database(table_name="patient_data",  connection=uri, if_table_exists='append')
-
-    print(df.head())
-
-    return "okay", 200
-
-    """"
-
-    print("DataFrame read")
-    # Create a list of dictionaries representing rows
-    rows = [
-        {
-            'data_point': idx,
-            'patient_id': patient_id,
-            'week': week,
-            'night_id': night_id,
-            'recorder': recorder,
-            'mr': row['MR'],
-            'ml': row['ML'],
-            'ecg': row['ECG']
-        }
-        for idx, row in enumerate(df.to_dicts())
-    ]
-
-    print("Finished creating dict")
-    # Use SQLAlchemy bulk_insert_mappings for a bulk insert
-    db.session.bulk_insert_mappings(PatientData, rows)
-    db.session.commit()
-    return "Succesfully inserted into db", 200
-
-    """
-
-
-@main.route('/get-emg-5-min/<string:sensor>/<int:patient_id>/<string:week>/<string:filename>/<int:x>/<int:y>',  methods=['GET'])
-def get_mr_5_min(sensor, patient_id, week, filename, x, y):
-    try:
-        sampling_rate = 256
-        total_seconds = NightDuration.query.filter_by(patient_id=patient_id, week=week, file=filename).first().seconds
-        print(total_seconds)
-        data_length = int(total_seconds * sampling_rate)
-
-        print(f"data length: {data_length}")
-
-        # Example usage
-        file_path = f'C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled/p{patient_id}_wk{week}/{filename}_emg_256Hz.csv'
-        
-        start_id, end_id = convert_to_sample_indexes(x, y, data_length, 256)
-
-        print("got start and end id")
-        print(start_id, end_id)
-
-        if sensor == 'emg':
-            df = pl.read_csv(file_path,columns=['MR', 'ML'], skip_rows_after_header=start_id, n_rows=end_id-start_id)
-            print("df read ")
-
-            seconds = int(len(df) / 2000)
-
-            df = get_5_min_emg(df, seconds)
-            
-        if sensor == 'ecg':
-            df = pl.read_csv(file_path,columns=['ECG'], skip_rows_after_header=start_id, n_rows=end_id-start_id)
-
-
-        return df, 200
-    
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-
-
-@main.route('/save-emg-downsampled-data/<int:patient_id>/<string:week>/<string:filename>',  methods=['GET'])
-def save_downsampled_data(patient_id, week, filename):
-    try:
-        print("Start")
-        start_time = time.time()
-        sampling_rate = 2000
-        
-        file_path = f'C:/Users/eleon/Desktop/SDAP/backend/src/data/p{patient_id}_wk{week}/{filename}'
-
-        loc = pl.read_csv(file_path.rsplit('Fnorm.csv', 1)[0] + "location_Bites.csv")
-        df = pl.read_csv(file_path,columns=['MR', 'ML'])
-
-        print("df read")
-
-        seconds = int(len(df) / sampling_rate)
-
-        preprocess_and_downsample_emg(patient_id, week, filename, df, loc, seconds)
-
-        end_time = time.time()
-
-        print(F"Elapsed time: {(end_time-start_time)}")
-
-        return "Downsampled data saved successfully.", 200
-    
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-        
-
-        
-
 

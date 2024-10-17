@@ -1,188 +1,233 @@
 <template>
     <el-row style="margin-top: 10px;">
         <el-col :span="2"><router-link :to="'/patient-data/'"><el-button type="primary"> <el-icon> <ArrowLeft /> </el-icon> Patient Data</el-button></router-link></el-col>
-        <el-col :span="1" :offset="2"><el-tag type="success" size="large">Advanced</el-tag></el-col>
-        <el-col :span="13" :offset="1"><PipelineStepper :step="2" /></el-col>
+        <el-col :span="1" :offset="2"><UserTag /></el-col>
+        <el-col :span="13" :offset="1"><PipelineStepper :step="1" /></el-col>
         <el-col :span="2" :offset="1"><router-link :to="'/monitoring/'"><el-button type="primary"> Monitoring Dashboards  <el-icon> <ArrowRight /> </el-icon></el-button></router-link></el-col>
     </el-row>
     <el-row justify="center"> <h1>Patient {{ this.$store.state.patientId }}, Week {{ this.$store.state.weekId }}, file {{ this.$store.state.file }}, size {{ this.$store.state.fileSize }} GB</h1></el-row>
-    <el-row>
-        <el-col :span="13" :offset="2" v-loading="imgLoading" element-loading-text="Loading night images...">
-            <!-- Select dropdown for image selection -->
-            <el-select v-model="selectedImageLabel" placeholder="Select an image" @change="updateImage">
-                <el-option
-                    v-for="image in images"
-                    :key="image.label"
-                    :label="image.label"
-                    :value="image.label"
-                />
-            </el-select>
-            <el-button @click="this.loadImages('new')">
-                Update
-            </el-button>
-
+    <div v-if="this.$store.state.userType==='basic'">
+        <el-row justify="center">
+            <el-col :span="7">
+                <div style="display: flex; align-items: center;">
+                    <el-select v-model="selectedImageLabel" placeholder="Select an image" @change="updateImage">
+                        <el-option
+                            v-for="image in images"
+                            :key="image.label"
+                            :label="image.label"
+                            :value="image.label"
+                        />
+                    </el-select>
+                    <el-button @click="this.loadImages('new')" style="margin-left:7px">
+                        Update
+                    </el-button>
+                </div>
+            </el-col>
+        </el-row>
+        <el-row justify="center">
             <!-- Display the selected image -->
             <div v-if="selectedImage">
-                <el-image :src="selectedImage" :alt="selectedImage" style="width: auto; height: 300px"
-                :zoom-rate="1.2" :max-scale="7" :min-scale="0.2" :preview-src-list="[selectedImage]"/>
+                <el-image :src="selectedImage" :alt="selectedImage" style="width: auto; height: auto"
+                    :zoom-rate="1.2" :max-scale="7" :min-scale="0.2" :preview-src-list="[selectedImage]"/>
             </div>
-        </el-col>
-        <el-col :offset="1" :span="5">
-            <el-radio-group v-model="heatMapRadio" @change="selectHeatMap(heatMapRadio)">
-                <el-radio-button label="Events" value="events" />
-                <el-radio-button label="Sleep Stages" value="ssd" />
-            </el-radio-group>
+        </el-row>
+    </div>
+    <div v-else>
+        <el-row>
+            <el-col :span="13" :offset="2" v-loading="imgLoading" element-loading-text="Loading night images...">
+                <!-- Select dropdown for image selection -->
+                <el-select v-model="selectedImageLabel" placeholder="Select an image" @change="updateImage">
+                    <el-option
+                        v-for="image in images"
+                        :key="image.label"
+                        :label="image.label"
+                        :value="image.label"
+                    />
+                </el-select>
+                <el-button @click="this.loadImages('new')">
+                    Update
+                </el-button>
 
-            <div v-if="heatMapRadio === 'events'" id="ec-heatmap" v-loading="!ssdDataReceived" element-loading-text="Retrieving events and sleep stages data..." style="width: 500px; height: 400px;"></div>
-            <div v-else id="ssd-heatmap" v-loading="!ssdDataReceived" element-loading-text="Retrieving sleep stages data..." style="width: 500px; height: 400px;"></div>
-        </el-col>
-    </el-row>
-
-    <el-row>
-        <el-col :span="5" v-loading="!emgReceived">
-            <el-card>
-                <div v-if="amountEvents === 0">
-                    <h3>No events predicted during currently selected frame.</h3>
+                <!-- Display the selected image -->
+                <div v-if="selectedImage">
+                    <el-image :src="selectedImage" :alt="selectedImage" style="width: auto; height: 300px"
+                    :zoom-rate="1.2" :max-scale="7" :min-scale="0.2" :preview-src-list="[selectedImage]"/>
                 </div>
-                <div v-else>
-                    <h3>Predicted events:</h3>
-                    <el-scrollbar height="560px">
-                    <el-card class="text item" v-for="(value, key) in current5minEvents" :key="key" @click="clickCard()">
-                        <i>{{ getEventStatus(eventStatus[key])}}</i><br>
-                        <el-row justify="center" style="margin-bottom: 10px;">
-                            <el-button type="primary" round @click="zoomToEvent(key, value)" size="large">
-                                <el-tooltip content="Click to zoom" placement="top">Event {{ key.slice(1) }}</el-tooltip>
-                            </el-button>
-                            <el-popover
-                                placement="top-start"
-                                :title="`Event ${key.slice(1)}`"
-                                :width="200"
-                                trigger="hover"
-                            >
-                                <b>EMG Metrics</b><br>
-                                Avg. RMS MR: {{ (value.rms_mr).toFixed(2) }}<br>
-                                Avg. RMS MR: {{ (value.rms_ml).toFixed(2) }}<br>
-                                Avg. St. dev. MR : {{ (value.std_mr).toFixed(2) }} <br>
-                                Avg. Std. dev. ML {{ (value.std_ml).toFixed(2) }} <br>
-                                <b>HRV Metrics</b><br>
-                                LF/HF MR: {{ (value.HRV_lf_hf).toFixed(2) }} <br>Mean: {{ (value.HRV_mean).toFixed(2) }}<br> SD: {{ (value.HRV_sdnn).toFixed(2) }} <br>
+            </el-col>
+            <el-col :offset="1" :span="5">
+                <el-radio-group v-model="heatMapRadio" @change="selectHeatMap(heatMapRadio)">
+                    <el-radio-button label="Events" value="events" />
+                    <el-radio-button label="Sleep Stages" value="ssd" />
+                </el-radio-group>
+                <div v-if="Object.keys(this.predictions).length === 0"><h3>No events predicted.</h3></div>
+                <div v-if="heatMapRadio === 'events'" id="ec-heatmap" v-loading="!ssdDataReceived" element-loading-text="Retrieving events and sleep stages data..." style="width: 500px; height: 400px;"></div>
+                <div v-else id="ssd-heatmap" v-loading="!ssdDataReceived" element-loading-text="Retrieving sleep stages data..." style="width: 500px; height: 400px;"></div>
+            </el-col>
+        </el-row>
 
+        <el-row>
+            <el-col :span="5" v-loading="!emgReceived">
+                <el-card>
+                    <div v-if="amountEvents === 0">
+                        <h3>No events predicted during currently selected frame.</h3>
+                    </div>
+                    <div v-else>
+                        <h3>Predicted events:</h3>
+                        <el-scrollbar height="560px">
+                        <el-card class="text item" v-for="(value, key) in current5minEvents" :key="key" @click="clickCard()">
+                            <i>{{ getEventStatus(eventStatus[key])}}</i><br>
+                            <el-row justify="center" style="margin-bottom: 10px;">
+                                <el-button type="primary" round @click="zoomToEvent(key, value)" size="large">
+                                    <el-tooltip content="Click to zoom" placement="top">Event {{ key.slice(1) }}</el-tooltip>
+                                </el-button>
+                                <el-popover
+                                    placement="top-start"
+                                    :title="`Event ${key.slice(1)}`"
+                                    :width="200"
+                                    trigger="hover"
+                                >
+                                    <b>EMG Metrics</b><br>
+                                    Avg. RMS MR: {{ (value.rms_mr).toFixed(2) }}<br>
+                                    Avg. RMS MR: {{ (value.rms_ml).toFixed(2) }}<br>
+                                    Avg. St. dev. MR : {{ (value.std_mr).toFixed(2) }} <br>
+                                    Avg. Std. dev. ML {{ (value.std_ml).toFixed(2) }} <br>
+                                    <b>HRV Metrics</b><br>
+                                    LF/HF MR: {{ (value.HRV_lf_hf).toFixed(2) }} <br>Mean: {{ (value.HRV_mean).toFixed(2) }}<br> SD: {{ (value.HRV_sdnn).toFixed(2) }} <br>
+
+                                    <template #reference>
+                                        <el-icon size="large" color='#409EFF'><InfoFilled /></el-icon>
+                                    </template>
+                                </el-popover>
+                            </el-row>
+                            
+                            <!--BOTTOM PART CARD-->
+                            <div style="margin-left: 10px;">
+                            <el-row>
+                                <div>
+                                    Start (s)   <el-input-number v-model="value.start_s" placeholder="Start" :precision="2" :step="0.5" :min="Math.min(...emgTime)" :max="value.end_s-1" size="small" @change="updateMarkArea(key, value)" style="width: 125px; margin-bottom: 10px; margin-left: 5px;"/>
+                                </div>
+                                <div>
+                                    End (s)   <el-input-number v-model="value.end_s" placeholder="End" :precision="2" :step="0.5" :min="value.start_s+1" :max="Math.max(...emgTime)" size="small" @change="updateMarkArea(key, value)" style="width: 120px; margin-bottom: 10px; margin-left: 10px;"/>
+                                </div>
+                            </el-row>
+                            <el-row>
+                                <p><b>SD (event):</b>  {{(value.HRV_lf_hf).toFixed(2)}}   <b style="margin-left: 10px;">Duration: </b> {{(value.end_s-value.start_s).toFixed(2)}} s</p>
+                            </el-row>
+                            <el-row>
+                                <div>
+                                    Event type:
+                                    <el-radio-group v-model="eventTypes[key]" size="small" @change="updateEventType(key, eventTypes[key])" style="margin-left: 10px; margin-top: 20px;">
+                                        <el-radio-button label="Phasic" value="phasic" />
+                                        <el-radio-button label="Tonic" value="tonic" />
+                                        <el-radio-button label="Mixed" value="mixed" />
+                                    </el-radio-group>
+                                    <el-button type="danger" size="small" circle @click="updateEventType(key, '')" style="margin-top:4px; margin-left:5px"><el-icon><Close /></el-icon></el-button>
+                                </div>
+                            </el-row>
+                            <el-row style="margin-top: 20px;">
+                                <div style="display: flex; align-items: center;">
+                                    Sensors:
+                                    <el-checkbox-group v-model="sensorsCheckBox[key]" size="small" style="margin-left: 10px;" @change="handleSensorsCheckBoxChange(key, sensorsCheckBox[key])">
+                                        <el-checkbox-button value="MR">MR</el-checkbox-button>
+                                        <el-checkbox-button value="ML">ML</el-checkbox-button>
+                                    </el-checkbox-group>
+                                </div>
+                            </el-row>
+                            <el-row>
+                                <el-radio-group v-model="confirmedEvents[key]" size="large" @change="updateConfirmedEvents(key, confirmedEvents[key], value)" :fill="getFillColor(confirmedEvents[key])" style="margin-left: 40%; margin-top: 20px;">
+                                    <el-radio-button label="Discard" :value="false" />
+                                    <el-radio-button label="Confirm" :value="true" />
+                                </el-radio-group>
+                            </el-row>
+                        </div>
+                        </el-card>
+                    </el-scrollbar>
+                    </div>
+                </el-card>
+                <el-tooltip
+                    class="box-item"
+                    effect="dark"
+                    content="Not implemented yet."
+                    placement="top"
+                >
+                    <el-button style="width:100%; margin-top:3px"><el-icon style="margin-right: 3px"><Refresh /></el-icon> Retrain Model</el-button>
+                </el-tooltip>
+            </el-col> 
+            <el-col :span="1" style="margin-top:300px">
+                <el-button type="primary" circle @click="moveBackward()" :disabled="tileIndex==='0.00'"><el-icon><ArrowLeft /></el-icon></el-button>
+            </el-col>
+            <el-col :span="14" v-loading="!emgReceived" element-loading-text="Loading the data...">
+                <el-row>
+                        <label :span="2" style="margin-right: 10px; margin-top: 5px;"><b>Threshold MR (% of MVC):</b></label>
+                        <el-input-number type="number" v-model="thresholdMr" :span="5"  :step="1" @change="updateThresholdMr(thresholdMr)" style="margin-right: 10px; width:120px"/>
+                        <div style="margin-left: 30px">
+                            <el-button :plain="true" :type="editButtonType" @click="triggerEditMode()">
+                                Edit Mode
+                            </el-button>
+                        </div>
+                        <div v-if="selectionActive && startSelection && endSelection" style="margin-left: 30px">
+                            <el-popover
+                                placement="bottom"
+                                :width="250"
+                                trigger="click"
+                                content="this is content, this is content, this is content"
+                            >
+                            <b>Add event</b>
+                            <el-form :model="eventForm" class="form-container">
+                                <el-form-item label="Start (s)">
+                                <el-input-number v-model="eventForm.start" :precision="2" :min="0" label="Start Time" />
+                                </el-form-item>
+                                <el-form-item label="End (s)">
+                                <el-input-number v-model="eventForm.end" :precision="2" :min="0" label="End Time" />
+                                </el-form-item>
+                                <b>Duration: {{ (eventForm.end - eventForm.start).toFixed(2)}} s</b>
+                                <el-form-item label="Reason for event">
+                                    <el-input
+                                        v-model="eventForm.justificationNewEvent"
+                                        style="width: 240px"
+                                        :rows="2"
+                                        type="textarea"
+                                        placeholder="Please input"
+                                    />
+                                </el-form-item>
+                                <el-form-item style="margin-top: 5px;">
+                                <el-button type="primary" @click="addNewEvent(eventForm.start, eventForm.end, eventForm.justificationNewEvent)">Submit</el-button>
+                                </el-form-item>
+                            </el-form>
                                 <template #reference>
-                                    <el-icon size="large" color='#409EFF'><InfoFilled /></el-icon>
+                                <el-badge is-dot class="item">
+                                <el-button class="m-2" @click="updateSelectionValues">+ Add</el-button> 
+                                </el-badge>
                                 </template>
                             </el-popover>
-                        </el-row>
-                        
-                        <!--BOTTOM PART CARD-->
-                        <div style="margin-left: 10px;">
-                        <el-row>
-                            <div>
-                                Start (s)   <el-input-number v-model="value.start_s" placeholder="Start" :precision="2" :step="0.5" :min="Math.min(...emgTime)" :max="value.end_s-1" size="small" @change="updateMarkArea(key, value)" style="width: 125px; margin-bottom: 10px; margin-left: 5px;"/>
-                            </div>
-                            <div>
-                                End (s)   <el-input-number v-model="value.end_s" placeholder="End" :precision="2" :step="0.5" :min="value.start_s+1" :max="Math.max(...emgTime)" size="small" @change="updateMarkArea(key, value)" style="width: 120px; margin-bottom: 10px; margin-left: 10px;"/>
-                            </div>
-                        </el-row>
-                        <el-row>
-                            <p><b>SD (event):</b>  {{(value.HRV_lf_hf).toFixed(2)}}   <b style="margin-left: 10px;">Duration: </b> {{(value.end_s-value.start_s).toFixed(2)}} s</p>
-                        </el-row>
-                        <el-row>
-                            <div>
-                                Event type:
-                                <el-radio-group v-model="eventTypes[key]" size="small" @change="updateEventType(key, eventTypes[key])" style="margin-left: 10px; margin-top: 20px;">
-                                    <el-radio-button label="Phasic" value="phasic" />
-                                    <el-radio-button label="Tonic" value="tonic" />
-                                    <el-radio-button label="Mixed" value="mixed" />
-                                </el-radio-group>
-                                <el-button type="danger" size="small" circle @click="updateEventType(key, '')" style="margin-top:4px; margin-left:5px"><el-icon><Close /></el-icon></el-button>
-                            </div>
-                        </el-row>
-                        <el-row style="margin-top: 20px;">
-                            <div style="display: flex; align-items: center;">
-                                Sensors:
-                                <el-checkbox-group v-model="sensorsCheckBox[key]" size="small" style="margin-left: 10px;" @change="handleSensorsCheckBoxChange(key, sensorsCheckBox[key])">
-                                    <el-checkbox-button value="MR">MR</el-checkbox-button>
-                                    <el-checkbox-button value="ML">ML</el-checkbox-button>
-                                </el-checkbox-group>
-                            </div>
-                        </el-row>
-                        <el-row>
-                            <el-radio-group v-model="confirmedEvents[key]" size="large" @change="updateConfirmedEvents(key, confirmedEvents[key], value)" :fill="getFillColor(confirmedEvents[key])" style="margin-left: 40%; margin-top: 20px;">
-                                <el-radio-button label="Discard" :value="false" />
-                                <el-radio-button label="Confirm" :value="true" />
-                            </el-radio-group>
-                        </el-row>
-                    </div>
-                    </el-card>
-                </el-scrollbar>
-                </div>
-            </el-card>
-        </el-col> 
-        <el-col :span="1" style="margin-top:300px">
-            <el-button type="primary" circle @click="moveBackward()" :disabled="tileIndex==='0.00'"><el-icon><ArrowLeft /></el-icon></el-button>
-        </el-col>
-        <el-col :span="14" v-loading="!emgReceived" element-loading-text="Loading the data...">
-            <el-row>
-                    <label :span="2" style="margin-right: 10px; margin-top: 5px;"><b>Threshold MR (% of MVC):</b></label>
-                    <el-input-number type="number" v-model="thresholdMr" :span="5"  :step="1" @change="updateThresholdMr(thresholdMr)" style="margin-right: 10px; width:120px"/>
-                    <div style="margin-left: 30px">
-                        <el-button id="edit-button" :plain="true" :type="buttonType" @click="clickButton">
-                            Edit Mode
-                        </el-button>
-                    </div>
-                    <div v-if="selectionActive && startSelection && endSelection" style="margin-left: 30px">
-                        <el-popover
-                            placement="bottom"
-                            :width="250"
-                            trigger="click"
-                            content="this is content, this is content, this is content"
-                        >
-                        <b>Add event</b>
-                        <el-form :model="eventForm" class="form-container">
-                            <el-form-item label="Start (s)">
-                            <el-input-number v-model="eventForm.start" :precision="2" :min="0" label="Start Time" />
-                            </el-form-item>
-                            <el-form-item label="End (s)">
-                            <el-input-number v-model="eventForm.end" :precision="2" :min="0" label="End Time" />
-                            </el-form-item>
-                            <b>Duration: {{ (eventForm.end - eventForm.start).toFixed(2)}} s</b>
-                            <el-form-item label="Reason for event">
-                                <el-input
-                                    v-model="eventForm.justificationNewEvent"
-                                    style="width: 240px"
-                                    :rows="2"
-                                    type="textarea"
-                                    placeholder="Please input"
-                                />
-                            </el-form-item>
-                            <el-form-item style="margin-top: 5px;">
-                            <el-button type="primary" @click="addNewEvent(eventForm.start, eventForm.end, eventForm.justificationNewEvent)">Submit</el-button>
-                            </el-form-item>
-                        </el-form>
-                            <template #reference>
-                            <el-badge is-dot class="item">
-                            <el-button class="m-2" @click="updateSelectionValues">+ Add</el-button> 
-                            </el-badge>
-                            </template>
-                        </el-popover>
-                    </div>
-                    <div style="margin-left: 30px">
-                        <el-button id="zoom-button" :plain="true" :disabled="zoomDisabled">
-                            Zoom
-                        </el-button>    
-                    </div>
+                        </div>
+                        <div style="margin-left: 30px">
+                            <!--
+                            <el-button id="zoom-button" :plain="true" :disabled="zoomDisabled" @click="activateZoom()">
+                                Zoom
+                            </el-button>
+                        -->
+                            <el-button id="zoom-button" :plain="true" :type="zoomButtonType" @click="activateZoom()">
+                                Zoom
+                            </el-button>
+                            <!--
+                            <el-button @click="zoomReset()" :disabled="!zoomActive">Zoom reset</el-button>
+                        -->  
+                            <el-button @click="zoomReset()">Zoom reset</el-button>   
+                        </div>
+                    
+                </el-row>
                 
-            </el-row>
+                <div id="emg-chart" style="width: 100%; height: 600px;"></div>
+                <label :span="2" style="margin-right: 10px; margin-top: 5px;"><b>Threshold ML (% of MVC):</b></label>
+                    <el-input-number type="number" v-model="thresholdMl" :span="5"  :step="1" @change="updateThresholdMl(thresholdMl)" style="margin-right: 10px; width:120px"/>
+            </el-col>
+            <el-col :span="1" style="margin-top:300px">
+                <el-button type="primary" circle @click="moveForward()" :disabled="(parseFloat(parseFloat(this.tileIndex)+0.5).toFixed(2)) > parseFloat((parseFloat(totalCells)).toFixed(2))"><el-icon><ArrowRight /></el-icon></el-button>
+            </el-col>
             
-            <div id="emg-chart" style="width: 100%; height: 600px;"></div>
-            <label :span="2" style="margin-right: 10px; margin-top: 5px;"><b>Threshold ML (% of MVC):</b></label>
-                <el-input-number type="number" v-model="thresholdMl" :span="5"  :step="1" @change="updateThresholdMl(thresholdMl)" style="margin-right: 10px; width:120px"/>
-        </el-col>
-        <el-col :span="1" style="margin-top:300px">
-            <el-button type="primary" circle @click="moveForward()" :disabled="(parseFloat(parseFloat(this.tileIndex)+0.5).toFixed(2)) > parseFloat((parseFloat(totalCells)).toFixed(2))"><el-icon><ArrowRight /></el-icon></el-button>
-        </el-col>
-        
-    </el-row>
+        </el-row>
+    </div>
 
   </template>
   
@@ -191,27 +236,32 @@
   import * as echarts from 'echarts';
   import { markRaw } from 'vue';
   import axios from 'axios';
-  import {ArrowRight, ArrowLeft} from '@element-plus/icons-vue'
+  import {ArrowRight, ArrowLeft, Refresh} from '@element-plus/icons-vue'
   import {reactive} from 'vue';
+  import UserTag from '@/components/UserTag.vue';
 
   export default {
     name: 'EventsClassificationDef',
     components: {
         PipelineStepper,
         ArrowRight,
-        ArrowLeft
+        ArrowLeft,
+        UserTag,
+        Refresh
     },
     async mounted(){
-        await this.getPredictions();
-        await this.getThresholds();
-        await this.getData((0).toFixed(2));
-        await this.getSsdData();
+        if(this.$store.state.userType === 'advanced'){
+            await this.getPredictions();
+            await this.getThresholds();
+            await this.getData((0).toFixed(2));
+            await this.getSsdData();
 
-        if(this.heatMapRadio === 'events'){
-            this.drawECHeatMap();
-        }
-        if (this.heatMapRadio === 'ssd') {
-            await this.drawSSDHeatMap();
+            if(this.heatMapRadio === 'events'){
+                this.drawECHeatMap();
+            }
+            if (this.heatMapRadio === 'ssd') {
+                await this.drawSSDHeatMap();
+            }
         }
         this.loadImages("old");
     },
@@ -245,7 +295,8 @@
             thresholdMr: 0,
             thresholdMl: 0,
             selectionActive: false,
-            buttonType: "",
+            editButtonType: "",
+            zoomButtonType: "",
             zoomDisabled: false,
             startSelection: null,
             endSelection: null,
@@ -263,7 +314,8 @@
             imgLoading: true,
             ssdData: [],
             ssdDataReceived: false,
-            heatMapRadio: ''
+            heatMapRadio: '',
+            zoomActive: false
 
 
         }
@@ -278,6 +330,35 @@
             } if(heatMapRadio === 'ssd'){
                 await this.drawSSDHeatMap();
             }
+        },
+        activateZoom() {
+            this.zoomActive = !this.zoomActive;
+
+            if(this.zoomActive){
+                this.zoomButtonType = "primary"
+            } else {
+                this.zoomButtonType = ""
+            }
+            console.log("zoom active: ", this.zoomActive)
+            this.emgChart.dispatchAction({
+                type: 'takeGlobalCursor',
+                key: 'dataZoomSelect',
+                dataZoomSelectActive: this.zoomActive,
+            });
+        },
+        zoomReset(){
+            this.emgChart.dispatchAction({
+                type: 'dataZoom',
+                start: Math.min(...this.emgTime),
+                end: Math.max(...this.emgTime)
+            });
+
+            // Deactivate zoom mode on double-click
+            //this.emgChart.dispatchAction({
+            //    type: 'takeGlobalCursor',
+            //    key: 'dataZoomSelect',
+            //    dataZoomSelectActive: false
+            //});
         },
         async loadImages(version) {
             this.imgLoading = true
@@ -339,17 +420,41 @@
             // Green for Confirm, Red for Discard
             return confirmed ? '#13ce66' : '#ff4949';
         },
-        clickButton() {
+        triggerEditMode() {
             console.log("SELECTION MODE ACTIVE")
             this.selectionActive = !this.selectionActive;
 
             console.log(this.selectionActive)
             if(this.selectionActive){
-                this.buttonType = "primary"
-                this.zoomDisabled = true
+                this.editButtonType = "primary"
+                //this.zoomDisabled = true
             } else {
-                this.buttonType = ""
-                this.zoomDisabled = false
+                this.editButtonType = ""
+                //this.zoomDisabled = false
+            }
+            if(this.selectionActive==true){
+                this.zoomActive = false;
+                this.zoomButtonType = ""
+                // Deactivate zoom mode on double-click
+                this.emgChart.dispatchAction({
+                    type: 'takeGlobalCursor',
+                    key: 'dataZoomSelect',
+                    dataZoomSelectActive: false
+                });
+                this.emgChart.dispatchAction({
+                    type: 'takeGlobalCursor',
+                    key: 'brush',
+                    brushOption: {
+                        brushType: 'lineX',
+                        brushMode: 'single'
+                    }
+                });
+            } else {
+                console.log("ZOOOOOOOM: ", this.zoomActive)
+                this.emgChart.dispatchAction({
+                    type: 'brush',
+                    areas: []
+                });
             }
         },
         clickCard(){
@@ -830,7 +935,7 @@
                     console.log(err)
                 })
         },
-        /*
+        
         zoomToEvent(key, value){
             if (this.emgChart) {
                 //this.basicStyle = {}
@@ -845,11 +950,11 @@
                 this.emgChart.dispatchAction({
                     type: 'dataZoom',
                     startValue: (startNorm*200) - (5*200),
-                    endValue: (endNorm*200) - (5*200)
+                    endValue: (endNorm*200) + (5*200)
                 });
             }
         },
-        */
+        
         async drawEMGLinePlot(){
             let emgChart = markRaw(echarts.init(document.getElementById('emg-chart')));
             this.emgChart = emgChart;
@@ -1202,6 +1307,23 @@
             
             this.emgChart.setOption(option);
 
+            // Double-click to reset zoom
+            this.emgChart.getZr().on('dblclick', (params) => {
+                console.log(params);
+                this.emgChart.dispatchAction({
+                    type: 'dataZoom',
+                    start: Math.min(...this.emgTime),
+                    end: Math.max(...this.emgTime)
+                });
+
+                // Deactivate zoom mode on double-click
+                //this.emgChart.dispatchAction({
+                //    type: 'takeGlobalCursor',
+                //    key: 'dataZoomSelect',
+                //    dataZoomSelectActive: false
+                //});
+            });
+            /*
             document.getElementById('edit-button').addEventListener('click', () => {
                 if(this.selectionActive==true){
                     this.emgChart.dispatchAction({
@@ -1220,11 +1342,12 @@
                 }
                 
             });
+            */
 
             this.emgChart.on('brushSelected', this.handleBrushSelection);
         },
         handleBrushSelection(params) {
-            this.selectionActive = true;
+            //this.selectionActive = true;
             const selected = params.batch[0];
             console.log("selected: ", selected)
             if (selected) {
@@ -1267,21 +1390,21 @@
                                 {
                                     yAxis: (this.mvcMR*thresholdMr/100).toFixed(2), // Set the threshold value here
                                     label: {
-                                        formatter: 'Threshold', // Customize label
+                                        formatter: 'Threshold MR', // Customize label
                                         position: 'start', // Position label at the end of the line
                                     },
                                     lineStyle: {
-                                        color: 'red', // Customize line color
-                                        type: 'dashed' // Customize line type (solid, dashed, dotted, etc.)
+                                        color: 'rgba(58, 128, 60, 0.7)', // Customize line color
+                                        type: 'solid' // Customize line type (solid, dashed, dotted, etc.)
                                     }
                                 }, {
                                         yAxis: this.mvcMR, // Set the threshold value here
                                         label: {
-                                            formatter: 'MVC', // Customize label
+                                            formatter: 'MVC MR', // Customize label
                                             position: 'start', // Position label at the end of the line
                                         },
                                         lineStyle: {
-                                            color: 'orange', // Customize line color
+                                            color: 'rgba(255, 127, 80, 0.7)', // Customize line color
                                             type: 'solid' // Customize line type (solid, dashed, dotted, etc.)
                                         }
                                     }
@@ -1315,21 +1438,21 @@
                                 {
                                     yAxis: (this.mvcML*thresholdMl/100).toFixed(2), // Set the threshold value here
                                     label: {
-                                        formatter: 'Threshold', // Customize label
+                                        formatter: 'Threshold ML', // Customize label
                                         position: 'start', // Position label at the end of the line
                                     },
                                     lineStyle: {
-                                        color: 'red', // Customize line color
-                                        type: 'dashed' // Customize line type (solid, dashed, dotted, etc.)
+                                        color: 'rgba(58, 128, 60, 0.7)', // Customize line color
+                                        type: 'solid' // Customize line type (solid, dashed, dotted, etc.)
                                     }
                                 },{
                                         yAxis: this.mvcML, // Set the threshold value here
                                         label: {
-                                            formatter: 'MVC', // Customize label
+                                            formatter: 'MVC ML', // Customize label
                                             position: 'start', // Position label at the end of the line
                                         },
                                         lineStyle: {
-                                            color: 'orange', // Customize line color
+                                            color: 'rgba(255, 127, 80, 0.7)', // Customize line color
                                             type: 'solid' // Customize line type (solid, dashed, dotted, etc.)
                                         }
                                     }
@@ -1454,10 +1577,13 @@
                     type: 'continuous',
                     dimension: 2,
                     min: 0,
-                    max: Object.keys(this.predictions).length == 0? 0: Object.keys(this.predictions).length,
+                    max: Math.max(...data.map(item => item[2])),
                     seriesIndex: 0,
-                    calculable: false,
-                    show: false,
+                    calculable: (Object.keys(this.predictions).length  > 0),
+                    show: (Object.keys(this.predictions).length  > 0),
+                    orient: 'horizontal',
+                    bottom: '20%',
+                    left: 'center'
                 },
                 {
                     dimension: 2,
@@ -1684,18 +1810,18 @@
                     min: Math.min(...remData.map(item => item[2])), // Min value of HRV_SDNN for NREM
                     max: Math.max(...remData.map(item => item[2])), // Max value of HRV_SDNN for NREM
                     inRange: {
-                        color: ['#dcabd4', '#d916b9'] // Grey scale for NREM
+                        color: ['#d916b9', '#dcabd4']
                     },
                     text: ["high uncertainty (high SD)", "low uncertainity (low SD)"],
                     outOfRange: {
                         color: 'transparent'
                     },
                     controller: {
-                        inRange: { color: ['#dcabd4', '#d916b9'] }
+                        inRange: { color: ['#d916b9', '#dcabd4'] }
                     },
                     calculable: true,
                     orient: 'horizontal',
-                    //left: 'center',
+                    left: 'center',
                     //bottom: '24%',
                     botton: '5%'
                 },
@@ -1706,18 +1832,18 @@
                     min: Math.min(...lightData.map(item => item[2])), // HRV_SDNN for REM
                     max: Math.max(...lightData.map(item => item[2])),
                     inRange: {
-                        color: ['#b0d8d8', '#12dada'] // Blue scale for REM
+                        color: ['#12dada', '#b0d8d8'] // Blue scale for REM
                     },
                     outOfRange: {
                         color: 'transparent'
                     },
                     controller: {
-                        inRange: { color: ['#b0d8d8', '#12dada'] }
+                        inRange: { color: ['#12dada', '#b0d8d8'] }
                     },
                     text: ["high uncertainty (high SD)", "low uncertainity (low SD)"],
                     calculable: true,
                     orient: 'horizontal',
-                    //left: 'center',
+                    left: 'center',
                     //bottom: '30%',
                     bottom: '10%'
                 },
@@ -1728,18 +1854,18 @@
                     min: Math.min(...deepData.map(item => item[2])), // HRV_SDNN for REM
                     max: Math.max(...deepData.map(item => item[2])),
                     inRange: {
-                        color: ['#715fb8', '#2b08b9'] // Blue scale for REM
+                        color: ['#2b08b9', '#715fb8'] // Blue scale for REM
                     },
                     outOfRange: {
                         color: 'transparent'
                     },
                     controller: {
-                        inRange: { color: ['#715fb8', '#2b08b9'] }
+                        inRange: { color: ['#2b08b9','#715fb8'] }
                     },
                     text: ["high uncertainty (high SD)", "low uncertainity (low SD)"],
                     calculable: true,
                     orient: 'horizontal',
-                    //left: 'center',
+                    left: 'center',
                     //bottom: '30%',
                     bottom:'20%'
                 },

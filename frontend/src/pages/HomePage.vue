@@ -4,7 +4,7 @@
     </el-row>
     <el-row justify="center" style="margin-bottom: 100px;">
         <el-col :span="10">
-            <PipelineStepper :step="4" />
+            <PipelineStepper :step="3" />
         </el-col>
     </el-row>
 
@@ -41,6 +41,7 @@
 <script>
 import PipelineStepper from '../components/PipelineStepper.vue'
 import { ElMessage } from 'element-plus';
+import axios from 'axios';
 
 export default{
     name: 'HomePage',
@@ -55,7 +56,6 @@ export default{
     },
     async mounted(){
         await this.getSettingsSaved();
-        this.$store.commit('setSettingsSaved', false);
 
     },
     methods: {
@@ -68,13 +68,26 @@ export default{
             }
         },
         async getSettingsSaved(){
-            // TODO: Change checking if settings exist in DATABASE
-            console.log(this.$store.state.settingsSaved)
-            console.log(typeof this.$store.state.settingsSaved)
-            this.settingsSaved = this.$store.state.settingsSaved;
-            if(this.$store.state.settingsSaved){
-                this.showDialog = false;
-            }
+            const path = `http://127.0.0.1:5000/settings`
+            const headers = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            };
+            await axios.get(path, {headers})
+                .then((res) => {
+                    console.log(res.data)
+
+                    if(Object.keys(res.data).length > 0){
+                        this.settingsSaved = true;
+                        this.showDialog = false;
+                    } else {
+                        this.settingsSaved = false;
+                        this.showDialog = true;
+                    }
+                })
+                .catch(err=>{
+                    console.log(err)
+                })
         }
     }
 }
