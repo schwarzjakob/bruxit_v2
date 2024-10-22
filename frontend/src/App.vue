@@ -24,3 +24,10 @@ export default {
   },
 }
 </script>
+
+<style>
+/* Apply Sans-serif font globally to all text elements */
+* {
+  font-family: 'Sans-serif', Arial, Helvetica, sans-serif;
+}
+</style>

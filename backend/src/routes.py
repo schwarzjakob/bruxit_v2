@@ -1,4 +1,4 @@
-from flask import Blueprint, request, send_from_directory, abort, jsonify
+from flask import Blueprint, request, send_from_directory, abort, jsonify, make_response
 from .models import Threshold, NightDuration, SSD, MVC, Prediction, Settings, db
 from .utils import *
 from .ssd import *
@@ -12,6 +12,7 @@ import joblib
 import pandas as pd
 import polars as pl
 from sklearn.preprocessing import MinMaxScaler
+import openpyxl
 
 
 main = Blueprint('main', __name__)
@@ -129,6 +130,82 @@ def patient_threshold(patient_id, week, file):
 
         return "threshold updated succesffully", 200
 
+@main.route('/download-events-csv', methods=['GET'])
+def download_events_csv():
+    # Create a pandas DataFrame with your data
+    predictions = Prediction.query.filter_by(confirmed=True)
+    prediction_data = []
+
+    for prediction in predictions:
+                prediction_data.append({'patient_id': prediction.patient_id,
+                                       'week': prediction.week,
+                                       'file': prediction.file,
+                                       'name': prediction.name,
+                                       "start_s": prediction.start_s,
+                                        "end_s": prediction.end_s,
+                                        "std_mr": prediction.std_mr,
+                                        "std_ml": prediction.std_ml,
+                                        "var_mr": prediction.var_mr,
+                                        "var_ml": prediction.var_ml,
+                                        "rms_mr": prediction.rms_mr,
+                                        "rms_ml": prediction.rms_ml,
+                                        "mav_mr": prediction.mav_mr,
+                                        "mav_ml": prediction.mav_ml,
+                                        "log_det_mr": prediction.log_det_mr,
+                                        "log_det_ml": prediction.log_det_ml,
+                                        "wl_mr": prediction.wl_mr,
+                                        "wl_ml": prediction.wl_ml,
+                                        "aac_mr": prediction.aac_mr,
+                                        "aac_ml": prediction.aac_ml,
+                                        "dasdv_mr": prediction.dasdv_mr,
+                                        "dasdv_ml": prediction.dasdv_ml,
+                                        "wamp_mr": prediction.wamp_mr,
+                                        "wamp_ml": prediction.wamp_ml,
+                                        "fr_mr": prediction.fr_mr,
+                                        "fr_ml": prediction.fr_ml,
+                                        "mnp_mr": prediction.mnp_mr,
+                                        "mnp_ml": prediction.mnp_ml,
+                                        "tot_mr": prediction.tot_mr,
+                                        "tot_ml": prediction.tot_ml,
+                                        "mnf_mr": prediction.mnf_mr,
+                                        "mnf_ml": prediction.mnf_ml,
+                                        "mdf_mr": prediction.mdf_mr,
+                                        "mdf_ml": prediction.mdf_ml,
+                                        "pkf_mr": prediction.pkf_mr,
+                                        "pkf_ml": prediction.pkf_ml,
+                                        "HRV_mean": prediction.HRV_mean,
+                                        "HRV_median": prediction.HRV_median,
+                                        "HRV_sdnn": prediction.HRV_sdnn,
+                                        "HRV_min": prediction.HRV_min,
+                                        "HRV_max": prediction.HRV_max,
+                                        "HRV_vhf": prediction.HRV_vhf,
+                                        "HRV_lf": prediction.HRV_lf,
+                                        "HRV_hf": prediction.HRV_hf,
+                                        "HRV_lf_hf": prediction.HRV_lf_hf,
+                                        "RRI": prediction.RRI,
+                                        "y_prob": prediction.y_prob,
+                                        "confirmed": prediction.confirmed,
+                                        "sensor": prediction.sensor,
+                                        "event_type": prediction.event_type,
+                                        "status": prediction.status,
+                                        "justification": prediction.justification})
+
+    predictions_df = pd.DataFrame(prediction_data)
+    predictions_df = predictions_df.sort_values(by=['patient_id', 'week', 'file', 'name'])
+
+    # Save the DataFrame to a CSV file in-memory (not on disk)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        predictions_df.to_excel(writer, index=False, sheet_name='Confirmed Events')
+
+    output.seek(0)
+
+    # Create a response with the CSV file and set appropriate headers
+    response = make_response(output.getvalue())
+    response.headers['Content-Disposition'] = 'attachment; filename=confirmed_events.xlsx'
+    response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+    return response
 
 @main.route('/get-emg/<int:patient_id>/<string:week>/<string:file>/<float:idx>',  methods=['GET'])
 def get_emg(patient_id, week, file, idx):
@@ -327,7 +404,7 @@ def patch_confirmed_events(patient_id, week, file):
 
     return "Confirmation of event updated successfully.", 200
 
-@main.route('/prediction-sensors/<int:patient_id>/<string:week>/<string:file>/', methods=['PATCH'])
+@main.route('/prediction-sensors/<int:patient_id>/<string:week>/<string:file>', methods=['PATCH'])
 def patch_prediction_sensors(patient_id, week, file):
     emg_right_name = get_settings().emg_right_name # 'MR'
     emg_left_name = get_settings().emg_left_name # 'ML'
@@ -346,6 +423,19 @@ def patch_prediction_sensors(patient_id, week, file):
     db.session.commit()
 
     return "Sensor updated successfully.", 200
+
+@main.route('/justification/<int:patient_id>/<string:week>/<string:file>', methods=['PATCH'])
+def patch_justification(patient_id, week, file):
+    update = request.json
+    print(update)
+    name = update['name']
+    justification = update['justification']
+
+    justification_to_update = Prediction.query.filter_by(patient_id=patient_id, week=week, file=file, name=name).first()
+    justification_to_update.justification = justification
+    db.session.commit()
+
+    return "Justification updated successfully.", 200
 
 
 @main.route('/prediction-event-type/<int:patient_id>/<string:week>/<string:file>', methods=['PATCH'])
@@ -550,11 +640,24 @@ def predict_events(patient_id, week, file):
             return result, 200
         
     if request.method == 'POST':
+        emg_right_name = get_settings().emg_right_name # 'MR'
+        emg_left_name = get_settings().emg_left_name # 'ML'
+
+
         event_info = request.json
         print(event_info)
 
         start_s = float(event_info['start_s'])
         end_s = float(event_info['end_s'])
+        event_type = event_info['event_type']
+
+        sensor = event_info['sensor']
+
+        # sensor = update['sensor']
+        if set(sensor) == set([emg_left_name]): sensor = emg_left_name
+        if set(sensor) == set([emg_right_name]): sensor = emg_right_name
+        if set(sensor) == set([emg_left_name, emg_right_name]): sensor = 'both' 
+        
         justification = event_info['justification']
         print(start_s, end_s, justification)
 
@@ -568,7 +671,7 @@ def predict_events(patient_id, week, file):
             print("Add prediction with name e1")
             name = "e1"
 
-            add_new_prediction(patient_id, week, file, start_s, end_s, justification, name, metrics)
+            add_new_prediction(patient_id, week, file, start_s, end_s, event_type, sensor, justification, name, metrics)
         
         else:
             print("logic to find new event position")
@@ -589,7 +692,7 @@ def predict_events(patient_id, week, file):
                     event.name = f"e{position}" 
                     #print(event.file, event.name, event.start_s, event.end_s)
                 db.session.commit()
-                add_new_prediction(patient_id, week, file, start_s, end_s, justification, name, metrics)
+                add_new_prediction(patient_id, week, file, start_s, end_s, event_type, sensor, justification, name, metrics)
 
 
             else:
@@ -605,7 +708,40 @@ def predict_events(patient_id, week, file):
                 last_position = int(last_event.name[1:])
                 name = f"e{last_position + 1}"
 
-                add_new_prediction(patient_id, week, file, start_s, end_s, justification, name, metrics)
+                add_new_prediction(patient_id, week, file, start_s, end_s, event_type, sensor, justification, name, metrics)
 
         return "Post event added by expert.", 200
 
+# Feature importance (assuming you have trained with feature names)
+@main.route('/model-feature-importance', methods=['GET'])
+def get_feature_importance():
+    model_file_name = get_settings().model_file_name
+    model_path = get_settings().model_path
+
+    model = xgb.XGBClassifier()
+    model.load_model(f"{model_path}/{model_file_name}")
+
+    importance = model.feature_importances_  # Use feature_importances_ from XGBClassifier
+    feature_names = model.get_booster().feature_names
+    feature_importance = sorted(zip(feature_names, importance.tolist()), key=lambda x: x[1], reverse=True)
+
+    print(feature_importance)
+    print(jsonify(feature_importance))
+    return jsonify(feature_importance)
+
+# Model summary information (e.g., model parameters)
+@main.route('/model-summary', methods=['GET'])
+def get_model_summary():
+    model_file_name = get_settings().model_file_name
+    model_path = get_settings().model_path
+
+    model = xgb.XGBClassifier()
+    model.load_model(f"{model_path}/{model_file_name}")
+
+    params = model.get_params()  # Gets model parameters
+    print(params)
+    print(jsonify(params))
+    return jsonify(params)
+
+
+#@main.route('/train-model', methods=['GET'])

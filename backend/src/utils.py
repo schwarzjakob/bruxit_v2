@@ -216,7 +216,7 @@ def generate_night_images(patient_id, week, file, mr, ml, predictions):
                 x1=start_s, 
                 x2=end_s, 
                 color="green", 
-                alpha=0.2
+                alpha=0.5
             )
             
             # Alternate between top and bottom for labels
@@ -398,7 +398,7 @@ def get_new_event_metrics(patient_id, week, file, start_s, end_s):
     return features_event_mean
 
 
-def add_new_prediction(patient_id, week, file, start_s, end_s, justification, name, metrics):
+def add_new_prediction(patient_id, week, file, start_s, end_s, event_type, sensor, justification, name, metrics):
     new_prediction = Prediction(patient_id=patient_id, week=week, file=file, name=name, start_s=start_s, end_s=end_s,
                                 std_mr=metrics['std_mr'].item(), std_ml=metrics['std_ml'].item(), var_mr=metrics['var_mr'].item(),
                                 var_ml=metrics['var_ml'].item(), rms_mr=metrics['rms_mr'].item(), rms_ml=metrics['rms_ml'].item(),
@@ -413,7 +413,7 @@ def add_new_prediction(patient_id, week, file, start_s, end_s, justification, na
                                 HRV_mean=metrics['HRV_mean'].item(), HRV_median=metrics['HRV_median'].item(), HRV_sdnn=metrics['HRV_sdnn'].item(),
                                 HRV_min=metrics['HRV_min'].item(), HRV_max=metrics['HRV_max'].item(), HRV_vhf=metrics['HRV_vhf'].item(),
                                 HRV_lf=metrics['HRV_lf'].item(), HRV_hf=metrics['HRV_hf'].item(), HRV_lf_hf=metrics['HRV_lf_hf'].item(),
-                                RRI=metrics['RRI'].item(), y_prob=1.00, confirmed=True, sensor="both", event_type="", status="new", justification=justification)
+                                RRI=metrics['RRI'].item(), y_prob=1.00, confirmed=True, sensor=sensor, event_type=event_type, status="new", justification=justification)
     
     #print(new_prediction)
 
