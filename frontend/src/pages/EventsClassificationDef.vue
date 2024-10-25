@@ -138,7 +138,7 @@
                                         :max="value.end_s - 1"
                                         size="small"
                                         @change="updateMarkArea(key, value)"
-                                        style="width: 100px; margin-left: 10px;"
+                                        style="width: 120px; margin-left: 10px;"
                                     />
                                 </div>
                                 <div style="display: flex; align-items: center;">
@@ -151,18 +151,18 @@
                                         :max="Math.max(...emgTime)"
                                         size="small"
                                         @change="updateMarkArea(key, value)"
-                                        style="width: 100px; margin-left: 10px;"
+                                        style="width: 120px; margin-left: 10px;"
                                     />
+                                </div>
+                                <div>
+                                <b>Duration:</b> {{ (value.end_s - value.start_s).toFixed(2) }} s
                                 </div>
                             </el-row>
 
                             <!-- SD and Duration -->
                             <el-row justify="space-between" style="margin-top: 10px;">
                                 <div>
-                                <b>SD (event):</b> {{ value.HRV_lf_hf.toFixed(2) }}
-                                </div>
-                                <div>
-                                <b>Duration:</b> {{ (value.end_s - value.start_s).toFixed(2) }} s
+                                <b>SD:</b> {{ value.HRV_sdnn.toFixed(2) }}
                                 </div>
                             </el-row>
 
@@ -327,7 +327,7 @@
                                 Zoom
                             </el-button>
                         -->
-                            <el-button id="zoom-button" :plain="true" size="small" :type="zoomButtonType" @click="activateZoom()" style="margin-top:43px">
+                            <el-button id="zoom-button" :plain="true" size="small" :type="zoomButtonType" :disabled="selectionActive" @click="activateZoom()" style="margin-top:43px">
                                 <el-icon style="margin-right:5px"><ZoomIn /></el-icon> Zoom
                             </el-button>
                             <!--
@@ -647,6 +647,7 @@
             } else if (eventStatus == "modified"){
                 return {'text': "Edited", 'color': color}
             }
+            return  {'text': "", 'color': color}
 
         },
         async handleSensorsCheckBoxChange(key, value){
@@ -1570,9 +1571,10 @@
                                         formatter: 'Threshold MR', // Customize label
                                         position: 'start', // Position label at the end of the line
                                     },
-                                    lineStyle: {
-                                        color: 'rgba(58, 128, 60, 0.7)', // Customize line color
-                                        type: 'solid' // Customize line type (solid, dashed, dotted, etc.)
+                                        lineStyle: {
+                                        color: '#a942e9', // Slightly opaque line for visibility
+                                        type: 'solid', // Change to 'dashed' if preferred
+                                        width: 3
                                     }
                                 }, {
                                         yAxis: this.mvcMR, // Set the threshold value here
@@ -1619,8 +1621,9 @@
                                         position: 'start', // Position label at the end of the line
                                     },
                                     lineStyle: {
-                                        color: 'rgba(58, 128, 60, 0.7)', // Customize line color
-                                        type: 'solid' // Customize line type (solid, dashed, dotted, etc.)
+                                        color: '#a942e9', // Slightly opaque line for visibility
+                                        type: 'solid', // Change to 'dashed' if preferred
+                                        width: 3
                                     }
                                 },{
                                         yAxis: this.mvcML, // Set the threshold value here
@@ -1728,7 +1731,7 @@
                     position: 'top',
                     formatter: function (params) {
                         let fiveMinInterval = parseFloat(params.data[0])+(params.data[1]*18)
-                        return `<b>Start (s)</b>: ${fiveMinInterval*60*5}<br><b>End (s)</b>: ${(fiveMinInterval*60*5)+(60*5)}`;
+                        return `<b >Start (s)</b>: ${fiveMinInterval*60*5}<br><b>End (s)</b>: ${(fiveMinInterval*60*5)+(60*5)}`;
                     }
                 },
                 title: {
@@ -2235,7 +2238,7 @@
                             show: false
                         },
                         itemStyle: {
-                            borderColor: 'black',
+                            borderColor: 'white',
                             borderType: 'solid',
                             borderWidth: 2,
                             show:false
