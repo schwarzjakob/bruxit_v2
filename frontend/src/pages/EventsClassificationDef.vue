@@ -58,7 +58,7 @@
             </el-col>
 
             <el-col :span="11" class="centered-column">
-                <el-radio-group v-model="heatMapRadio" @change="selectHeatMap(heatMapRadio)" :disabled="!ssdDataReceived">
+                <el-radio-group v-model="heatMapRadio" @change="selectHeatMap(heatMapRadio)" :disabled="!ssdDataReceived || imgLoading">
                     <el-radio-button label="Events" value="events" />
                     <el-radio-button label="Sleep Stages" value="ssd" />
                 </el-radio-group>
@@ -67,14 +67,22 @@
                     <h3>No events predicted.</h3>
                 </div>
             -->
-                <div v-if="heatMapRadio === 'events'" id="ec-heatmap" v-loading="!ssdDataReceived" element-loading-text="Retrieving events and sleep stages data..."></div>
+                <div v-if="heatMapRadio === 'events'" id="ec-heatmap" v-loading="(!ssdDataReceived) || imgLoading" element-loading-text="Retrieving events and sleep stages data..."></div>
 
-                <div v-else id="ssd-heatmap" v-loading="!ssdDataReceived" element-loading-text="Retrieving sleep stages data..."></div>
+                <div v-else id="ssd-heatmap" v-loading="(!ssdDataReceived) || imgLoading" element-loading-text="Retrieving sleep stages data..."></div>
             </el-col>
         </el-row>
 
         <el-row>
             <el-col :span="6" v-loading="!emgReceived || imgLoading">
+                <el-tooltip
+                    class="box-item"
+                    effect="dark"
+                    content="Not implemented yet."
+                    placement="top"
+                >
+                    <el-button type="primary" style="width:100%; margin-top:3px"><el-icon style="margin-right: 3px"><Refresh /></el-icon> Retrain Model</el-button>
+                </el-tooltip>
                 <el-card>
                     <div v-if="amountEvents === 0">
                         <h3>No events predicted during currently selected frame.</h3>
@@ -89,7 +97,7 @@
                             @click="clickCard()"
                         >
                             <!-- STATUS + ZOOM BUTTON -->
-                            <i>{{ getEventStatus(eventStatus[key]) }}</i>
+                            <i :style="{color: getEventStatus(eventStatus[key]).color}">{{ getEventStatus(eventStatus[key]).text }}</i>
                             <el-row justify="space-between" style="margin-bottom: 10px; margin-top:5px">
                             <el-button type="primary" round @click="zoomToEvent(key, value)" size="medium">
                                 <el-tooltip content="Click to zoom" placement="top">
@@ -107,7 +115,7 @@
                                 Avg. RMS MR: {{ value.rms_mr.toFixed(2) }}<br />
                                 Avg. RMS ML: {{ value.rms_ml.toFixed(2) }}<br />
                                 <b>HRV Metrics</b><br />
-                                LF/HF MR: {{ value.HRV_lf_hf.toFixed(2) }}<br />
+                                LF/HF: {{ value.HRV_lf_hf.toFixed(2) }}<br />   
                                 Mean: {{ value.HRV_mean.toFixed(2) }}<br />
                                 SD: {{ value.HRV_sdnn.toFixed(2) }}<br />
                                 <template #reference>
@@ -240,25 +248,22 @@
                     </div>
                     </el-card>
 
-                <el-tooltip
-                    class="box-item"
-                    effect="dark"
-                    content="Not implemented yet."
-                    placement="top"
-                >
-                    <el-button style="width:100%; margin-top:3px"><el-icon style="margin-right: 3px"><Refresh /></el-icon> Retrain Model</el-button>
-                </el-tooltip>
             </el-col> 
             <el-col :span="1" :offset="1" style="margin-top:300px">
                 <el-button type="primary" circle @click="moveBackward()" :disabled="tileIndex==='0.00'"><el-icon><ArrowLeft /></el-icon></el-button>
             </el-col>
             <el-col :span="14" v-loading="!emgReceived || imgLoading" element-loading-text="Loading the data...">
                 <el-row>
-                        <label :span="2" style="margin-right: 10px; margin-top: 5px;"><b>Threshold MR (% of MVC):</b></label>
-                        <el-input-number type="number" v-model="thresholdMr" :span="5"  :step="1" @change="updateThresholdMr(thresholdMr)" style="margin-right: 10px; width:120px"/>
+                        <div>
+                            <p style="font-size: small;"><b>Thresholds (% of MVC)</b></p>
+                            <label :span="2" style="font-size: small; margin-right: 10px"><b>MR:</b></label>
+                            <el-input-number type="number" v-model="thresholdMr" :span="5" size="small" :step="1" @change="updateThresholdMr(thresholdMr)" style="margin-right: 10px; width:120px"/>
+                            <label :span="2" style="font-size: small;margin-right: 10px;"><b>ML:</b></label>
+                            <el-input-number type="number" v-model="thresholdMl" :span="5"  size="small" :step="1" @change="updateThresholdMl(thresholdMl)" style="margin-right: 10px; width:120px"/>
+                        </div>
                         <div style="margin-left: 30px">
-                            <el-button :plain="true" :type="editButtonType" @click="triggerEditMode()">
-                                <el-icon style="margin-right: 5px"><Edit /></el-icon>  Edit Mode
+                            <el-button :plain="true" :type="editButtonType" size="small" @click="triggerEditMode()" style="margin-top:43px">
+                                <el-icon style="margin-right: 5px"><Plus /></el-icon> Add event
                             </el-button>
                         </div>
                         <div v-if="selectionActive && startSelection && endSelection" style="margin-left: 30px">
@@ -310,8 +315,8 @@
                                 </el-form-item>
                             </el-form>
                                 <template #reference>
-                                <el-badge is-dot class="item">
-                                <el-button class="m-2" @click="updateSelectionValues">+ Add</el-button> 
+                                <el-badge is-dot class="item" style="margin-top:43px">
+                                    <el-button class="m-2" size="small" @click="updateSelectionValues">Save </el-button> 
                                 </el-badge>
                                 </template>
                             </el-popover>
@@ -322,21 +327,19 @@
                                 Zoom
                             </el-button>
                         -->
-                            <el-button id="zoom-button" :plain="true" :type="zoomButtonType" @click="activateZoom()">
+                            <el-button id="zoom-button" :plain="true" size="small" :type="zoomButtonType" @click="activateZoom()" style="margin-top:43px">
                                 <el-icon style="margin-right:5px"><ZoomIn /></el-icon> Zoom
                             </el-button>
                             <!--
                             <el-button @click="zoomReset()" :disabled="!zoomActive">Zoom reset</el-button>
                         -->  
-                            <el-button @click="zoomReset()">
+                            <el-button @click="zoomReset()" size="small" style="margin-top:43px">
                                 <el-icon style="margin-right: 5px"><ZoomOut /></el-icon> Zoom reset</el-button>   
                         </div>
                     
                 </el-row>
                 
                 <div id="emg-chart" style="width: 100%; height: 600px;"></div>
-                <label :span="2" style="margin-right: 10px; margin-top: 5px;"><b>Threshold ML (% of MVC):</b></label>
-                    <el-input-number type="number" v-model="thresholdMl" :span="5"  :step="1" @change="updateThresholdMl(thresholdMl)" style="margin-right: 10px; width:120px"/>
             </el-col>
             <el-col :span="1" style="margin-top:300px">
                 <el-button type="primary" circle @click="moveForward()" :disabled="(parseFloat(parseFloat(this.tileIndex)+0.5).toFixed(2)) > parseFloat((parseFloat(totalCells)).toFixed(2))"><el-icon><ArrowRight /></el-icon></el-button>
@@ -352,7 +355,7 @@
   import * as echarts from 'echarts';
   import { markRaw } from 'vue';
   import axios from 'axios';
-  import {ArrowRight, ArrowLeft, Refresh, ZoomIn, ZoomOut} from '@element-plus/icons-vue'
+  import {ArrowRight, ArrowLeft, Refresh, ZoomIn, ZoomOut, Plus} from '@element-plus/icons-vue'
   import {reactive} from 'vue';
   import UserTag from '@/components/UserTag.vue';
 
@@ -365,7 +368,8 @@
         UserTag,
         Refresh,
         ZoomIn,
-        ZoomOut
+        ZoomOut,
+        Plus
     },
     async mounted(){
         if(this.$store.state.userType === 'advanced'){
@@ -390,6 +394,7 @@
             ml: [],
             stdMr: [], 
             stdMl: [],
+            rri: [],
             hrvLfHf: [],
             hrvMean: [],
             hrvSdnn: [],
@@ -436,7 +441,7 @@
             ssdData: [],
             ssdDataReceived: false,
             heatMapRadio: '',
-            zoomActive: false
+            zoomActive: false,
 
 
         }
@@ -631,14 +636,16 @@
 
         },
         getEventStatus(eventStatus){
+            let color = "black";
             if (eventStatus == "new"){
-                return "Manually added"
+                color = "rgb(133.4, 206.2, 97.4)"
+                return {'text': "Manually added", 'color': color }
 
             } else if (eventStatus == "model"){
-                return "Predicted by model"
+                return {'text': "Predicted by model", 'color': color}
 
             } else if (eventStatus == "modified"){
-                return "Edited"
+                return {'text': "Edited", 'color': color}
             }
 
         },
@@ -748,6 +755,8 @@
                 .then(() => {
                     console.log("Confirmed events updated!")
                     this.updateMarkArea(keyEvent, value)
+                    this.predictions[keyEvent].confirmed = boolConfirmed;
+                    this.drawECHeatMap()
 
                 })
                 .catch(err=>{
@@ -974,6 +983,7 @@
                 this.mr = res.data.MR;
                 this.ml = res.data.ML;
                 this.stdMr = res.data.std_mr;
+                this.rri = res.data.RRI;
                 this.stdMl = res.data.std_ml;
                 this.hrvLfHf = res.data.HRV_lf_hf;
                 this.hrvMean = res.data.HRV_mean;
@@ -1116,6 +1126,7 @@
             let mvcML = this.mvcML;
             let stdMR = this.stdMr;
             let stdML = this.stdMl;
+            let rri = this.rri;
             let hrvLfHf = this.hrvLfHf;
             let hrvMean = this.hrvMean;
             let hrvSdnn = this.hrvSdnn;
@@ -1180,6 +1191,8 @@
                             let endEvent = null;
                             let eventMeanFreqMr = null;
                             let eventMeanFreqMl = null;
+
+
                             //console.log("PARAMS: ", params)
                             let xPoint = parseFloat(params[0].axisValue);
                             let yPoint = params[0].value;
@@ -1193,6 +1206,7 @@
                             let currentHrvLfHf = hrvLfHf[params[0].dataIndex].toFixed(2);
                             let currentHrvMean =hrvMean[params[0].dataIndex].toFixed(2);
                             let currentHrvSdnn =hrvSdnn[params[0].dataIndex].toFixed(2);
+                            let currentRri = rri[params[0].dataIndex].toFixed(2);
 
                             
 
@@ -1208,13 +1222,14 @@
 
                                         eventMeanFreqMr = (value['mnf_mr']).toFixed(2);
                                         eventMeanFreqMl = (value ['mnf_ml']).toFixed(2);
+
                                     }
                                 }
                             }
 
                             // Return the tooltip HTML
                             return `
-                                ${title ? `<strong>${title}</strong><br>Start: ${startEvent.toFixed(2)} s, End: ${endEvent.toFixed(2)} s<br>Duration: ${(endEvent-startEvent).toFixed(2)} s<br>Fmean MR : ${eventMeanFreqMr} Hz<br>Fmean ML : ${eventMeanFreqMl} Hz<br>Fmedian: Hz<br>Other event features (?)<hr>` : ''}
+                                ${title ? `<strong>${title}</strong><br>Start: ${startEvent.toFixed(2)} s, End: ${endEvent.toFixed(2)} s<br>Duration: ${(endEvent-startEvent).toFixed(2)} s<br>Fmean MR : ${eventMeanFreqMr} Hz<br>Fmean ML : ${eventMeanFreqMl} Hz<hr>` : ''}
                                 ${params[0].marker}  <b>MR</b> : ${formattedValue}<br>
                                 MVC MR: ${mvcMR}<br>
                                 Std. MR: ${currentStdMR}<br>
@@ -1224,6 +1239,7 @@
                                 Std. ML: ${currentStdML}<br>
                                 <hr>
                                 <b> HRV metrics</b><br>
+                                RRI: ${currentRri}<br>
                                 LF / HF: ${currentHrvLfHf}<br>
                                 Mean: ${currentHrvMean}<br>
                                 SD: ${currentHrvSdnn}<br>
@@ -1376,8 +1392,8 @@
                     },
                     markArea: {
                         itemStyle: {
-                            color: 'rgba(208, 174, 229, 0.5)',  // Light purple with transparency
-                            borderColor: '#a942e9',  // Border color of the mark area
+                            color: 'rgba(133.4, 206.2, 97.4, 0.2)',  // Light purple with transparency
+                            borderColor: 'rgb(133.4, 206.2, 97.4)',  // Border color of the mark area
                             borderWidth: 1,  // Border width
                         },
                         data: markAreaData
@@ -1391,8 +1407,9 @@
                                     position: 'start', // Position label at the end of the line
                                 },
                                 lineStyle: {
-                                    color: 'rgba(58, 128, 60, 0.7)', // Slightly opaque line for visibility
-                                    type: 'solid' // Change to 'dashed' if preferred
+                                    color: '#a942e9', // Slightly opaque line for visibility
+                                    type: 'solid', // Change to 'dashed' if preferred
+                                    width: 3
                                 }
                             },
                             {
@@ -1403,7 +1420,8 @@
                                 },
                                 lineStyle: {
                                     color: 'rgba(255, 127, 80, 0.7)', // Customize line color
-                                    type: 'solid' // Customize line type (solid, dashed, dotted, etc.)
+                                    type: 'dashed',
+                                    width: 2
                                 }
                             }
                         ]
@@ -1427,8 +1445,8 @@
                     },
                     markArea: {
                         itemStyle: {
-                            color: 'rgba(208, 174, 229, 0.5)',  // Light purple with transparency
-                            borderColor: '#a942e9',  // Border color of the mark area
+                            color: 'rgba(133.4, 206.2, 97.4, 0.2)',  // Light purple with transparency
+                            borderColor: 'rgba(133.4, 206.2, 97.4)',  // Border color of the mark area
                             borderWidth: 1,  // Border width
                         },
                         data: markAreaData
@@ -1442,8 +1460,9 @@
                                     position: 'start', // Position label at the end of the line
                                 },
                                 lineStyle: {
-                                    color: 'rgba(58, 128, 60, 0.7)', // Slightly opaque line for visibility
-                                    type: 'solid' // Change to 'dashed' if preferred
+                                    color: '#a942e9', // Slightly opaque line for visibility
+                                    type: 'solid', // Change to 'dashed' if preferred
+                                    width: 3
                                 }
                             }, {
                                 yAxis: this.mvcML, // Set the threshold value here
@@ -1453,7 +1472,8 @@
                                 },
                                 lineStyle: {
                                     color: 'rgba(255, 127, 80, 0.7)', // Customize line color
-                                    type: 'solid' // Customize line type (solid, dashed, dotted, etc.)
+                                    type: 'dashed',
+                                    width: 2
                                 }
                             }
                         ]
@@ -1673,7 +1693,10 @@
                             // Check if the event falls within the cell's time range
                             if (start < cellEnd && end > cellStart) {
                                 // Increment the value for the corresponding cell
-                                heatmapData[cellIndex][2] += 1; // Increment the value at index 2 (the value field)
+                                console.log("CIAOCIAO")
+                                if(events[eventKey].confirmed === true){
+                                    heatmapData[cellIndex][2] += 1; // Increment the value at index 2 (the value field)
+                                }
                             }
                         }
                     }
@@ -1720,10 +1743,11 @@
                 },
                 grid: {
                     //height: '50%',
-                    top: '4%',
+                    //top: '4%',
+                    top: 35,
                     left:50,
                     right:120,
-                    bottom:40
+                    bottom:35
                 },
                 xAxis: {
                     type: 'category',
@@ -1738,6 +1762,7 @@
                     name:"Sleep cycle", 
                     data: sleepCycles,
                     inverse: true,
+                    nameLocation: 'start',
                     show: true,
                     splitArea: {
                         show: true
@@ -1967,10 +1992,10 @@
                 },
                 grid: {
                     //height: '50%',
-                    top: '2%',
+                    top: 35,
                     left:50,
                     right:150,
-                    bottom:40
+                    bottom:35
                 },
                 xAxis: {
                     type: 'category',
@@ -1985,6 +2010,7 @@
                     name:"Sleep cycle", 
                     data: sleepCycles,
                     inverse: true,
+                    nameLocation: 'start',
                     show: true,
                     splitArea: {
                         show: true
@@ -2245,7 +2271,7 @@
                 option.series[3].data = this.selectedInterval;
 
                 // Set the option once after updating the data
-                chartInstance.setOption(option).bind(this);
+                chartInstance.setOption(option);
 
                 console.log("SELECTED INTERVAL", this.selectedInterval);
 

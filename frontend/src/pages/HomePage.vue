@@ -20,19 +20,19 @@
 
 
     <el-row justify="center">
-        <h3>Please select a user type:</h3>
+        <h3>Please select a user mode:</h3>
     </el-row>
     <!--USER AVATARS-->
     <el-row justify="center">
         <div>
-           <el-avatar class="avatar-button" :size="220" src="https://cdn-icons-png.freepik.com/512/13518/13518010.png?ga=GA1.1.840118240.1706697088" @click="handleClick('advanced')"/> 
+           <el-avatar class="avatar-button-1" :size="220"  @click="handleClick('advanced')"><el-icon :size="200" ><Edit /></el-icon></el-avatar> 
            <br />
-           <h2 style="margin-left: 55px ;">Advanced</h2>
+           <h2 style="margin-left: 55px ;">Editor</h2>
         </div>
         <div>
-            <el-avatar class="avatar-button" :size="220" src="https://cdn-icons-png.freepik.com/512/6645/6645221.png?ga=GA1.1.840118240.1706697088" @click="handleClick('basic')"/>
+            <el-avatar class="avatar-button-2" :size="220" @click="handleClick('basic')"><el-icon :size="200"><View /></el-icon></el-avatar>
             <br />
-            <h2 style="margin-left: 82px ;">Basic</h2>
+            <h2 style="margin-left: 82px ;">Viewer</h2>
         </div>
 
     </el-row>
@@ -42,11 +42,15 @@
 import PipelineStepper from '../components/PipelineStepper.vue'
 import { ElMessage } from 'element-plus';
 import axios from 'axios';
+import {View, Edit} from '@element-plus/icons-vue'
+
 
 export default{
     name: 'HomePage',
     components: {
         PipelineStepper,
+        View,
+        Edit
     },
     data () {
         return {
@@ -95,14 +99,25 @@ export default{
 </script>
 
 <style>
-.avatar-button {
+.avatar-button-1 {
   cursor: pointer;
   display: inline-block;
   transition: transform 0.2s ease;
-  background-color: #66b1ff;
+  background-color: rgb(133.4, 206.2, 97.4);
   margin-right: 50px;
-  border:2px solid black;
+  ;
 }
+
+.avatar-button-2 {
+  cursor: pointer;
+  display: inline-block;
+  transition: transform 0.2s ease;
+  background-color: rgb(235, 180.6, 99);
+  margin-right: 50px;
+  ;
+}
+
+
 .avatar-button:hover {
   transform: scale(1.05);
 }

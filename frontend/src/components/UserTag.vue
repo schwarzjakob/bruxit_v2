@@ -1,6 +1,11 @@
 <template>
     <el-tag :type="userTypeTagType" size="large">
-        {{ userType.charAt(0).toUpperCase() + userType.slice(1) }}
+        <div v-if="userType === 'advanced'">
+            Editor
+        </div>
+        <div v-else>
+            Viewer
+        </div>
     </el-tag>
 </template>
   
