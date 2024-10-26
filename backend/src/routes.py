@@ -386,13 +386,14 @@ def patch_confirmed_events(patient_id, week, file):
     # justification = update['justification']
 
     prediction_to_update = Prediction.query.filter_by(patient_id=patient_id, week=week, file=file, name=update['name']).first()
+    
+    if((prediction_to_update.start_s != update['start_s']) or (prediction_to_update.end_s != update['end_s'])):
+        print("update status because of different start or end")
+        prediction_to_update.status = "modified"
 
     prediction_to_update.start_s = update['start_s']
     prediction_to_update.end_s = update['end_s']
     prediction_to_update.confirmed = update['confirmed']
-
-    if((prediction_to_update.start_s != update['start_s']) or (prediction_to_update.end_s != update['end_s'])):
-        prediction_to_update.status = "modified"
 
         # Change y_pred?
 

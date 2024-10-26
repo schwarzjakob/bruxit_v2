@@ -59,7 +59,7 @@
                             :value="image.label"
                         />
                     </el-select>
-                    <el-button @click="this.loadImages('new')" style="margin-left: 8px;">
+                    <el-button @click="this.loadImages('new')" style="margin-left: 8px;" :disabled="true">
                         Update
                     </el-button>
                 </div>
@@ -121,13 +121,20 @@
                             <!-- Popover Metrics -->
                             <el-popover
                                 placement="top-start"
-                                :title="`Event ${key.slice(1)}`"
                                 :width="200"
                                 trigger="hover"
                             >
+                                <h3><b>Event {{key.slice(1)}}</b></h3>
                                 <b>EMG Metrics</b><br />
-                                Avg. RMS MR: {{ value.rms_mr.toFixed(2) }}<br />
-                                Avg. RMS ML: {{ value.rms_ml.toFixed(2) }}<br />
+                                <i>(Values range from 0 to 100, averaged over event duration)</i><br>
+                                <u>MR</u><br>
+                                SD: {{ value.std_mr.toFixed(2) }}<br>
+                                Fmean: {{ value.mnf_mr.toFixed(2) }}<br>
+                                RMS: {{ value.rms_mr.toFixed(2) }}<br />
+                                <u>ML</u><br>
+                                SD: {{ value.rms_ml.toFixed(2) }}<br>
+                                Fmean: {{ value.mnf_ml.toFixed(2) }}<br>
+                                RMS: {{ value.rms_ml.toFixed(2) }}<br />
                                 <b>HRV Metrics</b><br />
                                 LF/HF: {{ value.HRV_lf_hf.toFixed(2) }}<br />   
                                 Mean: {{ value.HRV_mean.toFixed(2) }}<br />
@@ -412,6 +419,8 @@
             ml: [],
             stdMr: [], 
             stdMl: [],
+            fMeanMr: [],
+            fMeanMl: [],
             rri: [],
             hrvLfHf: [],
             hrvMean: [],
@@ -810,6 +819,10 @@
                     axios.patch(path, payload, {headers})
                         .then(() => {
                             console.log("Confirmed events start and end updated!")
+                            this.eventStatus[key] = "modified"
+                            this.zoomActive = false;
+                            this.zoomButtonType = ""
+
                         })
                         .catch(err=>{
                             console.log(err)
@@ -902,18 +915,14 @@
         },
         async moveForward(){
             console.log("MOVE FORWARD")
-            console.log((parseFloat(this.tileIndex) +0.5).toFixed(2))
-            console.log((parseFloat(this.totalCells)).toFixed(2))
             this.tileIndex = (parseFloat(this.tileIndex) + 0.50).toFixed(2)
+            //console.log(this.tileIndex)
             
-            console.log(this.selectedInterval.length)
+            console.log("length selected interval", this.selectedInterval.length)
             if(this.selectedInterval.length == 1){
-                console.log(this.selectedInterval[0])
                 let xCurrent = this.selectedInterval[0][0]
                 let yCurrent = this.selectedInterval[0][1]
                 let value = this.selectedInterval[0][2]
-                console.log(xCurrent, yCurrent, value)
-                console.log(typeof xCurrent, typeof yCurrent, typeof value)
 
                 if (xCurrent == 17){
                     yCurrent = yCurrent +1
@@ -922,11 +931,22 @@
                     xCurrent = xCurrent + 1
                 }
                 this.selectedInterval.push([xCurrent, yCurrent, value])
-                console.log(this.selectedInterval)
             }
             else if(this.selectedInterval.length == 2){
-                this.selectedInterval.shift();
+                //this.selectedInterval.shift();
                 console.log(this.selectedInterval)
+                const maxArray = this.selectedInterval.reduce((max, current) => {
+                // Primary condition: prioritize the array with a larger element at position 1
+                    if (current[1] > max[1]) {
+                        return current;
+                    }
+                    // Secondary condition: if position 1 is the same, pick the one with a larger element at position 0
+                    if (current[1] === max[1] && current[0] > max[0]) {
+                        return current;
+                    }
+                    return max;
+                });
+                this.selectedInterval = [maxArray];
             }
             if(this.heatMapRadio === 'events'){
                 this.drawECHeatMap();
@@ -939,16 +959,13 @@
         async moveBackward(){
             console.log("move backward")
             this.tileIndex = (parseFloat(this.tileIndex) - 0.50).toFixed(2)
+            console.log(this.tileIndex)
             let xCurrent = this.selectedInterval[0][0];
             let yCurrent = this.selectedInterval[0][1];
             let value = this.selectedInterval[0][2];
 
 
             if (this.selectedInterval.length == 1) {
-                console.log(this.selectedInterval[0]);
-
-                console.log(xCurrent, yCurrent, value);
-                console.log(typeof xCurrent, typeof yCurrent, typeof value);
 
                 // Move backward in the grid
                 if (xCurrent == 0) {
@@ -962,22 +979,23 @@
 
                 // Update the selected interval with the new xCurrent, yCurrent
                 this.selectedInterval.push([xCurrent, yCurrent, value]);
-                console.log(this.selectedInterval);
 
             } else if (this.selectedInterval.length == 2) {
-                // Remove the first element if the interval length is 2
+                console.log("selectedInterval: ", this.selectedInterval)
+                console.log(xCurrent, yCurrent, value)
                 
-                // Move backward in the grid
-                if (xCurrent == 0) {
-                    // If at the beginning of the row, move to the previous row
-                    yCurrent = yCurrent - 1;
-                    xCurrent = 17;  // Reset to the last column
-                } else {
-                    // Move one step back in the same row
-                    xCurrent = xCurrent - 1;
-                }
-                this.selectedInterval = [];
-                this.selectedInterval.push([xCurrent, yCurrent, value]);
+                const minArray = this.selectedInterval.reduce((min, current) => {
+                    // Always prioritize the array with a smaller element at position 1
+                    if (current[1] < min[1]) {
+                        return current;
+                    }
+                    // If no smaller element at position 1, check based on the smallest at position 0
+                    if (current[1] === min[1] && current[0] < min[0]) {
+                        return current;
+                    }
+                    return min;
+                });
+                this.selectedInterval = [minArray];
             }
 
             // Redraw the heatmap and fetch the new data
@@ -1044,6 +1062,8 @@
                 this.stdMr = res.data.std_mr;
                 this.rri = res.data.RRI;
                 this.stdMl = res.data.std_ml;
+                this.fMeanMr = res.data.mnf_mr;
+                this.fMeanMl = res.data.mnf_ml;
                 this.hrvLfHf = res.data.HRV_lf_hf;
                 this.hrvMean = res.data.HRV_mean;
                 this.hrvSdnn = res.data.HRV_sdnn;
@@ -1185,6 +1205,8 @@
             let mvcML = this.mvcML;
             let stdMR = this.stdMr;
             let stdML = this.stdMl;
+            let fMeanMr = this.fMeanMr;
+            let fMeanMl = this.fMeanMl;
             let rri = this.rri;
             let hrvLfHf = this.hrvLfHf;
             let hrvMean = this.hrvMean;
@@ -1258,8 +1280,8 @@
                             let title = "";
                             let startEvent = null;
                             let endEvent = null;
-                            let eventMeanFreqMr = null;
-                            let eventMeanFreqMl = null;
+                            //let eventMeanFreqMr = null;
+                            //let eventMeanFreqMl = null;
 
 
                             //console.log("PARAMS: ", params)
@@ -1276,6 +1298,9 @@
                             let currentHrvMean =hrvMean[params[0].dataIndex].toFixed(2);
                             let currentHrvSdnn =hrvSdnn[params[0].dataIndex].toFixed(2);
                             let currentRri = rri[params[0].dataIndex].toFixed(2);
+                            let currentFMeanMr = fMeanMr[params[0].dataIndex].toFixed(2);
+                            let currentFMeanMl = fMeanMl[params[1].dataIndex].toFixed(2);
+
 
                             
 
@@ -1289,8 +1314,8 @@
                                         startEvent = value['start_s']
                                         endEvent = value ['end_s']
 
-                                        eventMeanFreqMr = (value['mnf_mr']).toFixed(2);
-                                        eventMeanFreqMl = (value ['mnf_ml']).toFixed(2);
+                                        //eventMeanFreqMr = (value['mnf_mr']).toFixed(2);
+                                        //eventMeanFreqMl = (value ['mnf_ml']).toFixed(2);
 
                                     }
                                 }
@@ -1298,14 +1323,16 @@
 
                             // Return the tooltip HTML
                             return `
-                                ${title ? `<strong>${title}</strong><br>Start: ${startEvent.toFixed(2)} s, End: ${endEvent.toFixed(2)} s<br>Duration: ${(endEvent-startEvent).toFixed(2)} s<br>Fmean MR : ${eventMeanFreqMr} Hz<br>Fmean ML : ${eventMeanFreqMl} Hz<hr>` : ''}
+                                ${title ? `<strong>${title}</strong><br>Start: ${startEvent.toFixed(2)} s, End: ${endEvent.toFixed(2)} s<br>Duration: ${(endEvent-startEvent).toFixed(2)} s<hr>` : ''}
                                 ${params[0].marker}  <b>MR</b> : ${formattedValue}<br>
-                                MVC MR: ${mvcMR}<br>
-                                Std. MR: ${currentStdMR}<br>
+                                MVC: ${mvcMR}<br>
+                                SD: ${currentStdMR}<br>
+                                Fmean: ${currentFMeanMr}<br>
                                 <hr>
                                 ${params[1].marker} <b>ML</b> : ${params[1].value.toFixed(2)}<br>
-                                MVC ML: ${mvcML}<br>
-                                Std. ML: ${currentStdML}<br>
+                                MVC: ${mvcML}<br>
+                                SD: ${currentStdML}<br>
+                                Fmean: ${currentFMeanMl}<br>
                                 <hr>
                                 <b> HRV metrics</b><br>
                                 RRI: ${currentRri}<br>
@@ -1719,12 +1746,12 @@
             // Total number of cells based on the total duration in seconds
             const totalCells = Math.ceil(totalDurationInSeconds / cellDuration);
             this.totalCells = totalCells-1;
-            let x = (parseFloat(totalCells)).toFixed(2)
-            let y = (parseFloat(this.tileIndex) +0.5).toFixed(2)
-            console.log(x, y)
-            console.log(y > x)
+            //let x = (parseFloat(totalCells)).toFixed(2)
+            //let y = (parseFloat(this.tileIndex) +0.5).toFixed(2)
+            //console.log(x, y)
+            //console.log(y > x)
             const numRows = Math.ceil(totalCells / cellsPerRow); // Total number of rows needed
-            console.log(numRows);
+            //console.log(numRows);
 
             let heatmapData = [];
 
@@ -1739,13 +1766,13 @@
                     heatmapData.push([col, row, value]); // Note: Col (x) first, then Row (y)
                 }
             }
-            console.log(events)
+            //console.log(events)
             if(Object.keys(events).length !== 0){
                 //events = events.replace(/NaN/g, 'null');
                 //events = JSON.parse(events)
                 // Now we will check the events to populate the heatmap data
                 for (const eventKey in events) {
-                    console.log("eventKey: ", eventKey)
+                    //console.log("eventKey: ", eventKey)
                     const event = events[eventKey];
                     const start = event.start_s; // Start time of the event
                     const end = event.end_s;     // End time of the event
@@ -1764,7 +1791,7 @@
                             // Check if the event falls within the cell's time range
                             if (start < cellEnd && end > cellStart) {
                                 // Increment the value for the corresponding cell
-                                console.log("CIAOCIAO")
+                                //console.log("CIAOCIAO")
                                 if(events[eventKey].confirmed === true){
                                     heatmapData[cellIndex][2] += 1; // Increment the value at index 2 (the value field)
                                 }
@@ -1785,7 +1812,7 @@
 
             let heatMapData = this.generateHeatmapData(this.emgDataLengthS, this.predictions);
             let data = heatMapData["HM"]
-            console.log(heatMapData)
+            //console.log(heatMapData)
             let numRows = heatMapData["rows"]
 
             const sleepCycles = Array.from({length:numRows}, (_, i) => i + 1);

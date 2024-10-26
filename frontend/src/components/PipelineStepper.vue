@@ -2,7 +2,7 @@
     <el-steps :active="step">
         <el-step title="Patients Data"  />
         <el-step title="Events Classification"  />
-        <el-step title="Monitoring Dashboards" />
+        <el-step title="Download Events" />
   </el-steps>
 </template>
   

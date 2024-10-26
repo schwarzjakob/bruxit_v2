@@ -1,12 +1,26 @@
 <template>
     <el-row style="margin-top: 10px;">
-    <el-col :span="2"><router-link :to="'/ec-def/'"><el-button type="primary"> <el-icon> <ArrowLeft /> </el-icon> Sleep Stage Detection</el-button></router-link></el-col>
-        <el-col :span="1" :offset="2"><el-tag type="success" size="large">Advanced</el-tag></el-col>
+        <el-col :span="2"><router-link :to="'/ec-def/'"><el-button type="primary"> <el-icon> <ArrowLeft /> </el-icon> Events Classification</el-button></router-link></el-col>
+        <el-col :span="1" :offset="2"><UserTag /></el-col>
         <el-col :span="13" :offset="1"><PipelineStepper :step="2" /></el-col>
     </el-row>
-<h1>Monitoring</h1>
+    <el-row justify="center">
+        <h2 style="margin-top: 50px;color: #409EFF">Download Events Information</h2>
+    </el-row>
+    <el-row justify="center">
+        <el-text size="large">Download a .csv table containing the confirmed events for all the patients with the relevant features</el-text>
+    </el-row>
+    <el-row justify="center" style="margin-top: 20px">
+        <el-icon size="200">
+            <Download />
+        </el-icon>
+    </el-row>
+    <el-row justify="center" style="margin-top: 20px">
+        <el-button type="primary" @click="downloadEventsCsv">Download</el-button>
 
-<el-button @click="downloadEventsCsv">Download Events Report</el-button>
+    </el-row>
+
+<!--
 <div class="dashboard">
     <h1>XGBoost Model Dashboard</h1>
     
@@ -23,17 +37,21 @@
       </el-table>
     </div>
 </div>
-
+    -->
 </template>
 
 <script>
 import PipelineStepper from '../components/PipelineStepper.vue'
+import UserTag from '@/components/UserTag.vue';
+import { Download } from '@element-plus/icons-vue';
 import axios from 'axios';
 
 export default {
     name: "MonitoringPage",
     components: {
-        PipelineStepper
+        PipelineStepper,
+        UserTag,
+        Download
     },
     data () {
         return {
@@ -42,11 +60,12 @@ export default {
         }
     },
     mounted () {
-        this.fetchModelSummary();
-        this.fetchFeatureImportance();
+        //this.fetchModelSummary();
+        //this.fetchFeatureImportance();
     },
     methods: {
         // Fetch model summary from Flask backend
+        /*
         async fetchModelSummary() {
             const path = `http://127.0.0.1:5000/model-summary`
             const headers = {
@@ -83,6 +102,7 @@ export default {
                     console.error('Error fetching feature importance:', err);
                 })
         },
+        */
         async downloadEventsCsv(){
             try {
                 // Make an axios GET request to the Flask backend to get the CSV file

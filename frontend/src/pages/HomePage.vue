@@ -25,12 +25,12 @@
     <!--USER AVATARS-->
     <el-row justify="center">
         <div>
-           <el-avatar class="avatar-button-1" :size="220"  @click="handleClick('advanced')"><el-icon :size="200" ><Edit /></el-icon></el-avatar> 
+           <el-avatar class="avatar-button-1" :size="180"  @click="handleClick('advanced')"><el-icon :size="160" ><Edit /></el-icon></el-avatar> 
            <br />
            <h2 style="margin-left: 55px ;">Editor</h2>
         </div>
         <div>
-            <el-avatar class="avatar-button-2" :size="220" @click="handleClick('basic')"><el-icon :size="200"><View /></el-icon></el-avatar>
+            <el-avatar class="avatar-button-2" :size="180" @click="handleClick('basic')"><el-icon :size="160"><View /></el-icon></el-avatar>
             <br />
             <h2 style="margin-left: 82px ;">Viewer</h2>
         </div>
@@ -55,7 +55,8 @@ export default{
     data () {
         return {
             settingsSaved: false,
-            showDialog: true
+            //showDialog: true
+            showDialog: false
         }
     },
     async mounted(){
