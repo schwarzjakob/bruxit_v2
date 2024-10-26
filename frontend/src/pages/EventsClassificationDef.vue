@@ -3,9 +3,23 @@
         <el-col :span="2"><router-link :to="'/patient-data/'"><el-button type="primary"> <el-icon> <ArrowLeft /> </el-icon> Patient Data</el-button></router-link></el-col>
         <el-col :span="1" :offset="2"><UserTag /></el-col>
         <el-col :span="13" :offset="1"><PipelineStepper :step="1" /></el-col>
-        <el-col :span="2" :offset="1"><router-link :to="'/monitoring/'"><el-button type="primary"> Monitoring Dashboards  <el-icon> <ArrowRight /> </el-icon></el-button></router-link></el-col>
+        <el-col :span="2" :offset="1"><router-link :to="'/monitoring/'"><el-button type="primary"> Download Events  <el-icon> <ArrowRight /> </el-icon></el-button></router-link></el-col>
     </el-row>
-    <el-row justify="center"> <h2>Patient {{ this.$store.state.patientId }}, Week {{ this.$store.state.weekId }}, file {{ this.$store.state.file }}, size {{ this.$store.state.fileSize }} GB</h2></el-row>
+    <!--
+    <el-row justify="center">
+        <h2 class="page-title">
+            Patient {{ this.$store.state.patientId }}, Week {{ this.$store.state.weekId }}, file {{ this.$store.state.file }}, size {{ this.$store.state.fileSize }} GB
+        </h2>
+    </el-row>
+-->
+    <el-row justify="center">
+        <h2 style="color: #409EFF">
+            <el-icon><User /></el-icon> Patient {{ this.$store.state.patientId }}
+            <el-icon style="margin-left:5px"><Calendar /></el-icon> Week {{ this.$store.state.weekId }}
+            <el-icon style="margin-left:5px"><Document /></el-icon> File {{ this.$store.state.file }}
+            <el-icon style="margin-left:5px"><Files /></el-icon> Size {{ this.$store.state.fileSize }} GB
+        </h2>
+    </el-row>
     <!--BASIC USER-->
     <div v-if="this.$store.state.userType==='basic'">
         <el-row justify="center">
@@ -186,7 +200,7 @@
                                 <el-checkbox-group
                                     v-model="sensorsCheckBox[key]"
                                     size="small"
-                                    @change="handleSensorsCheckBoxChange(key, sensorsCheckBox[key])"
+                                    @change="handleSensorsCheckBoxChange(key, sensorsCheckBox[key], value)"
                                     style="margin-left: 10px;"
                                 >
                                     <el-checkbox-button value="MR">MR</el-checkbox-button>
@@ -355,7 +369,7 @@
   import * as echarts from 'echarts';
   import { markRaw } from 'vue';
   import axios from 'axios';
-  import {ArrowRight, ArrowLeft, Refresh, ZoomIn, ZoomOut, Plus} from '@element-plus/icons-vue'
+  import {ArrowRight, ArrowLeft, Refresh, ZoomIn, ZoomOut, Plus, Calendar, User, Document, Files} from '@element-plus/icons-vue'
   import {reactive} from 'vue';
   import UserTag from '@/components/UserTag.vue';
 
@@ -369,13 +383,17 @@
         Refresh,
         ZoomIn,
         ZoomOut,
-        Plus
+        Plus, 
+        User, 
+        Calendar,
+        Document, 
+        Files
     },
     async mounted(){
         if(this.$store.state.userType === 'advanced'){
             await this.getPredictions();
             await this.getThresholds();
-            await this.getData((0).toFixed(2));
+            await this.getData((0).toPrecision(12));
             await this.getSsdData();
 
             if(this.heatMapRadio === 'events'){
@@ -650,21 +668,12 @@
             return  {'text': "", 'color': color}
 
         },
-        async handleSensorsCheckBoxChange(key, value){
+        async handleSensorsCheckBoxChange(key, value, valueEvent){
             console.log("Change sensors on DB")
             console.log(key, value)
             if(value.length === 0){
                 console.log("length: 0")
                 this.sensorsCheckBox[key] = ['MR', 'ML']
-            }
-            else if(value.sort().join(',')===  ['MR'].sort().join(',')){
-                console.log("remove ML from markArea")
-
-            } else if (value.sort().join(',')===  ['ML'].sort().join(',')) {
-                console.log("remove MR from markArea")
-                
-            } else if (value.sort().join(',')===  ['MR', 'ML'].sort().join(',')){
-                console.log("add MR, ML to markArea")
             }
 
             const path = `http://127.0.0.1:5000/prediction-sensors/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
@@ -681,7 +690,7 @@
             await axios.patch(path, payload, {headers})
                 .then(() => {
                     console.log("Sensors of prediction updated!")
-                    //updateMark areas?
+                    this.updateMarkArea(key, valueEvent)
 
                 })
                 .catch(err=>{
@@ -722,12 +731,20 @@
             await axios.post(path, payload, {headers})
                 .then(() => {
                     console.log("Added new event!")
-                    this.selectionActive = false;
                     this.emgChart.dispatchAction({
                         type: 'brush',
                         areas: []
                     });
+                    this.selectionActive = false;
+                    this.editButtonType = ""
                     this.reloadData();
+
+                    this.emgChart.dispatchAction({
+                        type: 'takeGlobalCursor',
+                        key: 'brush',
+                        brushOption: false
+                    });
+                    
 
                 })
                 .catch(err=>{
@@ -806,27 +823,68 @@
                         const startNorm = ((start - min) / (max - min)) * (300 - 0) + 0;
                         const endNorm = ((end - min) / (max - min)) * (300 - 0) + 0;
 
-                        let found=false;
-                        // Iterate through both series to update markArea
+                        // First, remove any existing markArea entries for this key
                         option.series.forEach(series => {
                             if (series.markArea && series.markArea.data) {
-                                // Update the corresponding markArea for the specified key
-                                series.markArea.data.forEach(area => {
-                                    if (area[0].name === key) {
-                                        found=true;
-                                        area[0].xAxis = startNorm * 200; // Update the start xAxis
-                                        area[1].xAxis = endNorm * 200; // Update the end xAxis
-                                    }
-                                });
+                                series.markArea.data = series.markArea.data.filter(area => area[0].name !== key);
                             }
                         });
-                        if (found === false) {
+
+                        let found=false;
+                        // Iterate through both series to update markArea
+                        if(JSON.stringify(this.sensorsCheckBox[key].slice().sort()) === JSON.stringify(['MR', 'ML'].slice().sort())){
                             option.series.forEach(series => {
-                                series.markArea.data.push([
+                                if (series.markArea && series.markArea.data) {
+                                    // Update the corresponding markArea for the specified key
+                                    series.markArea.data.forEach(area => {
+                                        if (area[0].name === key) {
+                                            found=true;
+                                            area[0].xAxis = startNorm * 200; // Update the start xAxis
+                                            area[1].xAxis = endNorm * 200; // Update the end xAxis
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                        if(JSON.stringify(this.sensorsCheckBox[key].slice().sort()) === JSON.stringify(['MR'].slice().sort())){
+                            option.series[0].markArea.data.forEach(area => {
+                                if (area[0].name === key) {
+                                    area[0].xAxis = startNorm * 200;
+                                    area[1].xAxis = endNorm * 200;
+                                }
+                            });        
+                        }
+                        if(JSON.stringify(this.sensorsCheckBox[key].slice().sort()) === JSON.stringify(['ML'].slice().sort())){
+                            option.series[1].markArea.data.forEach(area => {
+                                if (area[0].name === key) {
+                                    area[0].xAxis = startNorm * 200;
+                                    area[1].xAxis = endNorm * 200;
+                                }
+                            });  
+                        }
+
+
+                        if (found === false) {
+                            if(JSON.stringify(this.sensorsCheckBox[key].slice().sort()) === JSON.stringify(['MR', 'ML'].slice().sort())){
+                                option.series.forEach(series => {
+                                        series.markArea.data.push([
+                                            { name: key, xAxis: startNorm * 200 }, // New start point
+                                            { xAxis: endNorm * 200 } // New end point
+                                    ]);
+                                });
+                            }
+                            if(JSON.stringify(this.sensorsCheckBox[key].slice().sort()) === JSON.stringify(['MR'].slice().sort())){
+                                option.series[0].markArea.data.push([
                                     { name: key, xAxis: startNorm * 200 }, // New start point
-                                    { xAxis: endNorm * 200 } // New end point
-                                ]);
-                            })
+                                    { xAxis: endNorm * 200 }
+                                ])        
+                            }
+                            if(JSON.stringify(this.sensorsCheckBox[key].slice().sort()) === JSON.stringify(['ML'].slice().sort())){
+                                option.series[1].markArea.data.push([
+                                    { name: key, xAxis: startNorm * 200 }, // New start point
+                                    { xAxis: endNorm * 200 }
+                                ])   
+                            }
                         }
 
                 
@@ -1131,7 +1189,9 @@
             let hrvLfHf = this.hrvLfHf;
             let hrvMean = this.hrvMean;
             let hrvSdnn = this.hrvSdnn;
-            let markAreaData = [];
+            //let markAreaData = [];
+            let markAreaDataMR = [];
+            let markAreaDataML = [];
             let events = {}
 
             if(Object.keys(this.predictions).length > 0) {
@@ -1150,11 +1210,19 @@
                     const startNorm = ((start - min) / (max-min)) * (300-0) + 0
                     const endNorm = ((end - min) / (max-min)) * (300-0) + 0
                     if(this.confirmedEvents[key] === true){
-                       markAreaData.push([{ name: key, xAxis: startNorm*200}, { xAxis: endNorm*200}]); 
+                        if(value.sensor === "both"){
+                            markAreaDataMR.push([{ name: key, xAxis: startNorm*200}, { xAxis: endNorm*200}])
+                            markAreaDataML.push([{ name: key, xAxis: startNorm*200}, { xAxis: endNorm*200}])
+                        }
+                        if(value.sensor === "MR"){
+                            markAreaDataMR.push([{ name: key, xAxis: startNorm*200}, { xAxis: endNorm*200}])
+                        }
+                        if(value.sensor === "ML"){
+                            markAreaDataML.push([{ name: key, xAxis: startNorm*200}, { xAxis: endNorm*200}])
+                        }
                     }
                     
                 }
-                console.log("markarea: ", markAreaData)
 
             }
             let option;
@@ -1274,11 +1342,11 @@
                     feature: {
                         dataZoom: {
                             yAxisIndex: false,
-                            //icon: null
+                            icon: null
                         },
                         brush: {
                             type: ['lineX', 'clear'],
-                            //show: false
+                            show: false
                         }
                     }
                 },
@@ -1397,7 +1465,7 @@
                             borderColor: 'rgb(133.4, 206.2, 97.4)',  // Border color of the mark area
                             borderWidth: 1,  // Border width
                         },
-                        data: markAreaData
+                        data: markAreaDataMR
                     },
                     markLine: {
                         data: [
@@ -1450,7 +1518,7 @@
                             borderColor: 'rgba(133.4, 206.2, 97.4)',  // Border color of the mark area
                             borderWidth: 1,  // Border width
                         },
-                        data: markAreaData
+                        data: markAreaDataML
                     },
                     markLine: {
                         data: [
@@ -1731,7 +1799,8 @@
                     position: 'top',
                     formatter: function (params) {
                         let fiveMinInterval = parseFloat(params.data[0])+(params.data[1]*18)
-                        return `<b >Start (s)</b>: ${fiveMinInterval*60*5}<br><b>End (s)</b>: ${(fiveMinInterval*60*5)+(60*5)}`;
+                        let cycle = parseInt(params.data[1])+1
+                        return `<b>Cycle ${cycle}</b><br><b >Start (s)</b>: ${fiveMinInterval*60*5}<br><b>End (s)</b>: ${(fiveMinInterval*60*5)+(60*5)}`;
                     }
                 },
                 title: {
@@ -1977,9 +2046,10 @@
                         //    return ''; // Return empty for series 3 to exclude from tooltip
                         //}
                         let fiveMinInterval = parseFloat(params.data[0])+(params.data[1]*18)
+                        let cycle = parseInt(params.data[1])+1
                         console.log(params)
                         console.log(params.value)
-                        return `<b>${(params.value[3]).toUpperCase()}</b><br />
+                        return `<b>Cycle ${cycle}</b><br><b>${(params.value[3]).toUpperCase()}</b><br />
                                 ${params.marker}: ${params.value[4].toFixed(2)} (LF/HF) ± ${params.value[2]} (SD)<br>
                                 <b>Start (s)</b>: ${fiveMinInterval*60*5}<br><b>End (s)</b>: ${(fiveMinInterval*60*5)+(60*5)}`;
                     }
