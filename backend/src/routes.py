@@ -255,7 +255,6 @@ def get_emg(patient_id, week, file, idx):
     end = time.time()
 
     print(f"{end-start} seconds taken.")
-    # print(result)
 
     return result | continuous_features, 200
 
@@ -377,14 +376,6 @@ def patch_confirmed_events(patient_id, week, file):
     update = request.json
     print(update)
 
-    
-    # sensor = update['sensor']
-    #  if set(sensor) == set(['ML']): sensor = 'ML'
-    # if set(sensor) == set(['MR']): sensor = 'MR'
-    # if set(sensor) == set(['ML', 'MR']): sensor = 'both' 
-    # event_type = update['event_type']
-    # justification = update['justification']
-
     prediction_to_update = Prediction.query.filter_by(patient_id=patient_id, week=week, file=file, name=update['name']).first()
     
     if((prediction_to_update.start_s != update['start_s']) or (prediction_to_update.end_s != update['end_s'])):
@@ -395,12 +386,8 @@ def patch_confirmed_events(patient_id, week, file):
     prediction_to_update.end_s = update['end_s']
     prediction_to_update.confirmed = update['confirmed']
 
-        # Change y_pred?
+    # Change y_pred?
 
-
-    #prediction_to_update.sensor = sensor
-    # if event_type: prediction_to_update = event_type
-    # prediction_to_update.justification = justification
     db.session.commit()
 
     return "Confirmation of event updated successfully.", 200
@@ -414,7 +401,6 @@ def patch_prediction_sensors(patient_id, week, file):
     print(update)
     sensor = update['sensor']
 
-    # sensor = update['sensor']
     if set(sensor) == set([emg_left_name]): sensor = emg_left_name
     if set(sensor) == set([emg_right_name]): sensor = emg_right_name
     if set(sensor) == set([emg_left_name, emg_right_name]): sensor = 'both' 
@@ -453,7 +439,6 @@ def patch_prediction_event_type(patient_id, week, file):
 
 @main.route('/night-images/<int:patient_id>/<string:week>/<string:file>/<string:version>', methods=['GET'])
 def get_night_images(patient_id, week, file, version):
-    #path = 'C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled'
     downsampled_data_path = get_settings().downsampled_data_path
     emg_right_name = get_settings().emg_right_name # 'MR'
     emg_left_name = get_settings().emg_left_name # 'ML'
@@ -461,7 +446,6 @@ def get_night_images(patient_id, week, file, version):
     # List the generated images from the directory
     output_dir = downsampled_data_path + f"/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv_images"
     if not os.path.exists(output_dir) or version=="new":
-        #return jsonify({"error": "No images found"}), 404
         data = pl.read_csv(downsampled_data_path + f"/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv",columns=[emg_right_name, emg_left_name])
         mr = data.get_column(emg_right_name)
         ml = data.get_column(emg_left_name)
@@ -469,8 +453,6 @@ def get_night_images(patient_id, week, file, version):
         predictions = Prediction.query.filter_by(patient_id=patient_id, week=week, file=file).all()
         print(predictions)
         print(type(predictions))
-        #if not predictions:
-        #    predictions = {}
         generate_night_images(patient_id, week, file, mr, ml, predictions)
 
     # List all images in the directory
@@ -654,7 +636,6 @@ def predict_events(patient_id, week, file):
 
         sensor = event_info['sensor']
 
-        # sensor = update['sensor']
         if set(sensor) == set([emg_left_name]): sensor = emg_left_name
         if set(sensor) == set([emg_right_name]): sensor = emg_right_name
         if set(sensor) == set([emg_left_name, emg_right_name]): sensor = 'both' 
@@ -691,7 +672,6 @@ def predict_events(patient_id, week, file):
                 for event in events_after:
                     position +=1
                     event.name = f"e{position}" 
-                    #print(event.file, event.name, event.start_s, event.end_s)
                 db.session.commit()
                 add_new_prediction(patient_id, week, file, start_s, end_s, event_type, sensor, justification, name, metrics)
 
@@ -743,6 +723,3 @@ def get_model_summary():
     print(params)
     print(jsonify(params))
     return jsonify(params)
-
-
-#@main.route('/train-model', methods=['GET'])

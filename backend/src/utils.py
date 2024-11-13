@@ -32,8 +32,6 @@ def rectify_signal(signal):
 
 
 def rms(emg_signal, sampling=200, window=0.06, min_periods=1):
-    # Define a window size (in number of samples)
-    # 60-120 ms?
     window_size = int(window*sampling)
 
     # Compute RMS with a rolling window
@@ -44,6 +42,7 @@ def rms(emg_signal, sampling=200, window=0.06, min_periods=1):
     print(f"RMS signal length: {len(signal_rms)}")
 
     return signal_rms
+
 
 def fast_rms(signal, sampling=200, window=0.06):
     window_size = int(window*sampling)
@@ -71,9 +70,6 @@ def find_mvc(signal_rms, loc):
         signal_bite_data = signal_rms[begin_contraction:end_contraction]
 
         signal_max_in_bite = signal_bite_data.max().iloc[0]
-
-        # TODO: check if average of ML and MR max row is okay
-        # max_in_bite_avg = (max_in_bite['MR'][0] + max_in_bite['ML'][0]) / 2
 
         if float(signal_max_in_bite) > float(signal_mvc):
             signal_mvc = signal_max_in_bite
@@ -178,8 +174,6 @@ def generate_night_images(patient_id, week, file, mr, ml, predictions):
     minimum_sampling_rate = get_settings().minimum_sampling_rate # 200
 
     output_dir = f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv_images/"
-    #os.makedirs(output_dir, exist_ok=True)
-
 
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
@@ -346,7 +340,6 @@ def get_continuous_features(features, idx, data_length=None):
     else:
         for row in filtered.rows(named=True):
             if count == 0 or count==len(filtered)-1:
-                #print("ciao")
                 for i in range(100):
                     append_features(continuous_features, row)
 
@@ -369,8 +362,6 @@ def get_continuous_features(features, idx, data_length=None):
                             append_features(continuous_features, row)
                     print(data_length)
                     print(len(continuous_features['std_mr']))
-
-
 
             else:
                 next = filtered.row(count+1, named=True)
@@ -415,8 +406,6 @@ def add_new_prediction(patient_id, week, file, start_s, end_s, event_type, senso
                                 HRV_lf=metrics['HRV_lf'].item(), HRV_hf=metrics['HRV_hf'].item(), HRV_lf_hf=metrics['HRV_lf_hf'].item(),
                                 RRI=metrics['RRI'].item(), y_prob=1.00, confirmed=True, sensor=sensor, event_type=event_type, status="new", justification=justification)
     
-    #print(new_prediction)
-
     db.session.add(new_prediction)
     db.session.commit()
 
@@ -470,6 +459,7 @@ def frequency_ratio(frequency, power):
     else:
         return ULC / UHC
 
+
 def mean_freq(frequency, power):
     num = 0
     den = 0
@@ -501,7 +491,8 @@ def median_freq(frequency, power):
         return frequency[i]
     except:
         return np.nan
-    
+
+
 def peak_freq(frequency, power):
     try:
         return frequency[power.argmax()]
@@ -529,6 +520,7 @@ def get_rri(ecg, sampling_rate=200):
     rri_adj_df = pd.DataFrame(data={'RRI': rr_intervals_adjusted, 'RRI_t': time_r_peaks_adjusted})
 
     return rri_adj_df
+
 
 # Function to populate the RRI column in df_sliding
 def extend_df_with_rri(df_sliding, df_rr):
@@ -586,7 +578,6 @@ def extract_features_for_prediction(sensor_data, window_size_emg_s=1, overlap_em
     print("seconds: ", len(sensor_data)/minimum_sampling_rate)
 
     for i in range(window_size_emg, len(sensor_data), overlap_emg):
-        # print(i, len(sensor_data))
 
         # Extract the 1-second window
         mr_window = mr_data[i-window_size_emg:i]
@@ -631,7 +622,7 @@ def extract_features_for_prediction(sensor_data, window_size_emg_s=1, overlap_em
         frequency_mr, power_mr = spectrum(mr_window, sampling_rate)
         frequency_ml, power_ml = spectrum(ml_window, sampling_rate)
         
-        # Frequency power
+        # Frequency Ratio
         fr_mr =frequency_ratio(frequency_mr, power_mr) 
         fr_ml =frequency_ratio(frequency_mr, power_mr)
 
@@ -661,10 +652,6 @@ def extract_features_for_prediction(sensor_data, window_size_emg_s=1, overlap_em
         
         current_features = [start_time, end_time, std_mr, std_ml, var_mr, var_ml, rms_mr, rms_ml, mav_mr, mav_ml, log_det_mr, log_det_ml, wl_mr, wl_ml, aac_mr, aac_ml, dasdv_mr, dasdv_ml, wamp_mr, wamp_ml, fr_mr, fr_ml, mnp_mr, mnp_ml, tot_mr, tot_ml, mnf_mr, mnf_ml, mdf_mr, mdf_ml, pkf_mr, pkf_ml]
         features_1s.append(current_features)
-    
-
-        if i % 10000000 == 0:
-            print(f"i: {i}")
 
 
     for i in range(window_size_ecg, len(ecg_data), overlap_ecg):
@@ -696,10 +683,6 @@ def extract_features_for_prediction(sensor_data, window_size_emg_s=1, overlap_em
     return features_rri
 
 
-
-import pandas as pd
-import numpy as np
-
 def aggregate_events(df):
     events = {}  # Dictionary to store the events
     event_counter = 1 
@@ -722,7 +705,6 @@ def aggregate_events(df):
             current_event_features.append(row[2:-2].values)  # Collect feature values
             current_event_y_probs.append(row['y_prob'])  # Collect y_prob
             current_event_y_values.append(row['y'])  # Collect y
-            #current_event_confirmed_values.append(row['confirmed'])  # Collect confirmed
             continue
 
         # Check if the current row is part of the same event
@@ -734,7 +716,6 @@ def aggregate_events(df):
             current_event_features.append(row[2:-2].values)  # Append features
             current_event_y_probs.append(row['y_prob'])  # Append y_prob
             current_event_y_values.append(row['y'])  # Append y
-            #current_event_confirmed_values.append(row['confirmed'])  # Collect confirmed
         else:
             # Save the current event to the events dictionary
             if current_event_start is not None:
@@ -763,6 +744,7 @@ def aggregate_events(df):
             current_event_y_probs = [row['y_prob']]  # Start new collection
             current_event_y_values = [row['y']]  # Start new collection
             #current_event_confirmed_values = [row['confirmed']]
+
 
     # Finalize the last event if it exists
     if current_event_start is not None:

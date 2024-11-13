@@ -4,12 +4,9 @@ import polars as pl
 import numpy as np
 import math
 from .utils import *
-from .models import SSD, db
+from .models import SSD, Settings, db
 import os
 
-
-
-base_dir="C:/Users/eleon/Desktop/SDAP/backend/src/data"
 
 def add_matrix_coordinates(df, x_max=18):
     df = df.copy()
@@ -50,24 +47,8 @@ def get_ako_ranges():
         'nrem': {'min':0.72, 'median': (2.59-0.72)/2, 'max': 2.59},
         'rem': {'min': 2.51-0.17, 'median': 2.51 , 'max': 2.51+0.17}
     }
-"""
 
-# TODO: talk with Gabi, Vera, Barbara about this
-def categorize_sleep_stage(value):
-    lower_rem, upper_rem = get_ako_ranges()['rem']['min'], get_ako_ranges()['rem']['max']
-    lower_nrem, upper_nrem = get_ako_ranges()['nrem']['min'], get_ako_ranges()['nrem']['max']
-    stage = ""
-    if lower_nrem <= value <= upper_nrem:
-        stage= "nrem"
-    
-    if lower_rem <= value <= upper_rem:
-        stage = "rem"
-    
-    if (not lower_nrem <= value <= upper_nrem) and (not lower_rem <= value <= upper_rem):
-        stage = "rem"
 
-    return stage
-"""
 def categorize_sleep_stage(lf_hf_ratio):
     # Ranges from Ako et al. paper
     light_sleep_range = (1.76, 2.59)
@@ -113,8 +94,10 @@ def find_selected_tiles(value):
     else:
         return False
 
+
 def HRV_analysis(patient_id, week, file, sampling_rate):
-    file_path = f"C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv"
+    downsampled_data_path = get_settings().downsampled_data_path
+    file_path = f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv"
     ecg = pl.read_csv(file_path, columns=["ECG"])
 
     ecg_clean = nk.ecg_clean(ecg, sampling_rate=sampling_rate)
@@ -141,19 +124,14 @@ def HRV_analysis(patient_id, week, file, sampling_rate):
 
 
 def return_HRV_analysis(patient_id, week_id, filename, sampling_rate):
-    file_path = base_dir + f"/p{patient_id}_wk{week_id}/{filename}"
+    original_data_path = get_settings().original_data_path
+    file_path = original_data_path + f"/p{patient_id}_wk{week_id}/{filename}"
     ecg = pl.read_csv(file_path, columns=['ECG'])
-
-    # Insert duration info in the database
-    #calculate_night_duration(patient_id, week_id, filename, len(ecg), sampling_rate=sampling_rate)
 
     ecg_clean = nk.ecg_clean(ecg, sampling_rate=sampling_rate)
     ecg_peaks = nk.ecg_findpeaks(ecg_clean, sampling_rate=sampling_rate)
     info, r_peaks_corrected = nk.signal_fixpeaks(ecg_peaks, sampling_rate=sampling_rate, iterative=False, show=False, method="Kubios")
 
-
-    # Save RR intervals to plot in events classification page 
-    # TODO: put in external function
 
     # Calculate RR intervals
     rr_intervals = np.diff(r_peaks_corrected) / sampling_rate * 1000
@@ -167,7 +145,8 @@ def return_HRV_analysis(patient_id, week_id, filename, sampling_rate):
 
     rri_adj_df = pd.DataFrame(data={'RRI': rr_intervals_adjusted, 'RRI_t': time_r_peaks_adjusted})
 
-    path = f"C:/Users/eleon/Desktop/SDAP/backend/src/data_resampled/p{patient_id}_wk{week_id}"
+    downsampled_data_path = get_settings().downsampled_data_path
+    path = f"{downsampled_data_path}/p{patient_id}_wk{week_id}"
     if not os.path.exists(path):
         os.makedirs(path)
 
