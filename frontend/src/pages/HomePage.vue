@@ -3,7 +3,7 @@
         <h1>Sensor Data Labeling and Analysis Tool</h1>
     </el-row>
     <el-row justify="center" style="margin-bottom: 100px;">
-        <el-col :span="10">
+        <el-col :span="10" :offset="1">
             <PipelineStepper :step="3" />
         </el-col>
     </el-row>

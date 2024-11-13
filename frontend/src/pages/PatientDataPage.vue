@@ -5,7 +5,7 @@
     </el-row>
 
     <el-row justify="center">
-        <h2>Choose the night of your choice:</h2>
+        <h2>Choose the patient's file of your choice:</h2>
     </el-row>
 
     <el-row justify="center">

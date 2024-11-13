@@ -11,12 +11,7 @@ import HomePage from './pages/HomePage.vue'
 import SettingsPage from './pages/SettingsPage.vue'
 import PatientDataPage from './pages/PatientDataPage.vue'
 import SleepStageDetectionPage from './pages/SleepStageDetectionPage.vue'
-import EventsClassificationPage from './pages/EventsClassificationPage.vue'
 import MonitoringPage from './pages/MonitoringPage.vue'
-import D3Example from './pages/D3Example.vue'
-import DemoPage from './pages/DemoPage.vue'
-import ECPage from './pages/ECPage.vue';
-import ECPage2 from './pages/ECPage2.vue';
 import EventsClassificationDef from './pages/EventsClassificationDef.vue';
 
 
@@ -36,28 +31,11 @@ const router = VueRouter.createRouter({
          path: '/monitoring',
          component: MonitoringPage,
      },{
-         path: '/events-classification',
-         component: EventsClassificationPage,
-     },{
         path: '/patient-data',
         component: PatientDataPage
     }, {
         path: '/settings',
         component: SettingsPage
-    }, {
-        path: '/d3-example',
-        component: D3Example
-    }, {
-        path: '/demo',
-        component: DemoPage
-    },
-    {
-        path: '/ec',
-        component: ECPage
-    },
-    {
-        path: '/ec2',
-        component: ECPage2
     },{
         path: '/ec-def',
         component: EventsClassificationDef
