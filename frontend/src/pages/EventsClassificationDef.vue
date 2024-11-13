@@ -5,13 +5,7 @@
         <el-col :span="13" :offset="1"><PipelineStepper :step="1" /></el-col>
         <el-col :span="2" :offset="1"><router-link :to="'/monitoring/'"><el-button type="primary"> Download Events  <el-icon> <ArrowRight /> </el-icon></el-button></router-link></el-col>
     </el-row>
-    <!--
-    <el-row justify="center">
-        <h2 class="page-title">
-            Patient {{ this.$store.state.patientId }}, Week {{ this.$store.state.weekId }}, file {{ this.$store.state.file }}, size {{ this.$store.state.fileSize }} GB
-        </h2>
-    </el-row>
--->
+
     <el-row justify="center">
         <h2 style="color: #409EFF">
             <el-icon><User /></el-icon> Patient {{ this.$store.state.patientId }}
@@ -59,7 +53,7 @@
                             :value="image.label"
                         />
                     </el-select>
-                    <el-button @click="this.loadImages('new')" style="margin-left: 8px;" :disabled="true">
+                    <el-button @click="this.loadImages('new')" style="margin-left: 8px;">
                         Update
                     </el-button>
                 </div>
@@ -71,19 +65,15 @@
                 </div>
             </el-col>
 
-            <el-col :span="11" class="centered-column">
+            <el-col :span="11" class="centered-column" v-loading="!ssdDataReceived || imgLoading" element-loading-text="Retrieving events and sleep stages data...">
                 <el-radio-group v-model="heatMapRadio" @change="selectHeatMap(heatMapRadio)" :disabled="!ssdDataReceived || imgLoading">
                     <el-radio-button label="Events" value="events" />
                     <el-radio-button label="Sleep Stages" value="ssd" />
                 </el-radio-group>
-                <!--
-                <div v-if="Object.keys(this.predictions).length === 0">
-                    <h3>No events predicted.</h3>
-                </div>
-            -->
-                <div v-if="heatMapRadio === 'events'" id="ec-heatmap" v-loading="(!ssdDataReceived) || imgLoading" element-loading-text="Retrieving events and sleep stages data..."></div>
 
-                <div v-else id="ssd-heatmap" v-loading="(!ssdDataReceived) || imgLoading" element-loading-text="Retrieving sleep stages data..."></div>
+                <div v-if="heatMapRadio === 'events'" id="ec-heatmap"></div>
+
+                <div v-else id="ssd-heatmap"></div>
             </el-col>
         </el-row>
 
@@ -108,7 +98,6 @@
                             class="text item"
                             v-for="(value, key) in current5minEvents"
                             :key="key"
-                            @click="clickCard()"
                         >
                             <!-- STATUS + ZOOM BUTTON -->
                             <i :style="{color: getEventStatus(eventStatus[key]).color}">{{ getEventStatus(eventStatus[key]).text }}</i>
@@ -120,7 +109,8 @@
                             </el-button>
                             <!-- Popover Metrics -->
                             <el-popover
-                                placement="top-start"
+                                placement="right-start"
+                                
                                 :width="200"
                                 trigger="hover"
                             >
@@ -140,7 +130,7 @@
                                 Mean: {{ value.HRV_mean.toFixed(2) }}<br />
                                 SD: {{ value.HRV_sdnn.toFixed(2) }}<br />
                                 <template #reference>
-                                <el-icon size="large" color="#409EFF"><InfoFilled /></el-icon>
+                                    <el-button><el-icon size="large" color="#409EFF"><InfoFilled /></el-icon> Metrics</el-button>
                                 </template>
                             </el-popover>
                             </el-row>
@@ -183,7 +173,7 @@
                             <!-- SD and Duration -->
                             <el-row justify="space-between" style="margin-top: 10px;">
                                 <div>
-                                <b>SD:</b> {{ value.HRV_sdnn.toFixed(2) }}
+                                <b>HRV SD:</b> {{ value.HRV_sdnn.toFixed(2) }}
                                 </div>
                             </el-row>
 
@@ -278,9 +268,17 @@
                         <div>
                             <p style="font-size: small;"><b>Thresholds (% of MVC)</b></p>
                             <label :span="2" style="font-size: small; margin-right: 10px"><b>MR:</b></label>
-                            <el-input-number type="number" v-model="thresholdMr" :span="5" size="small" :step="1" @change="updateThresholdMr(thresholdMr)" style="margin-right: 10px; width:120px"/>
+                            <el-input-number type="number" v-model="thresholdMr" :span="5" size="small" :step="1" @change="updateThresholdMr(thresholdMr)" style="margin-right: 10px; width:120px">
+                                <template #suffix>
+                                    <span>%</span>
+                                </template>
+                            </el-input-number>
                             <label :span="2" style="font-size: small;margin-right: 10px;"><b>ML:</b></label>
-                            <el-input-number type="number" v-model="thresholdMl" :span="5"  size="small" :step="1" @change="updateThresholdMl(thresholdMl)" style="margin-right: 10px; width:120px"/>
+                            <el-input-number type="number" v-model="thresholdMl" :span="5"  size="small" :step="1" @change="updateThresholdMl(thresholdMl)" style="margin-right: 10px; width:120px">
+                                <template #suffix>
+                                    <span>%</span>
+                                </template>
+                            </el-input-number>
                         </div>
                         <div style="margin-left: 30px">
                             <el-button :plain="true" :type="editButtonType" size="small" @click="triggerEditMode()" style="margin-top:43px">
@@ -343,17 +341,10 @@
                             </el-popover>
                         </div>
                         <div style="margin-left: 30px">
-                            <!--
-                            <el-button id="zoom-button" :plain="true" :disabled="zoomDisabled" @click="activateZoom()">
-                                Zoom
-                            </el-button>
-                        -->
                             <el-button id="zoom-button" :plain="true" size="small" :type="zoomButtonType" :disabled="selectionActive" @click="activateZoom()" style="margin-top:43px">
                                 <el-icon style="margin-right:5px"><ZoomIn /></el-icon> Zoom
                             </el-button>
-                            <!--
-                            <el-button @click="zoomReset()" :disabled="!zoomActive">Zoom reset</el-button>
-                        -->  
+ 
                             <el-button @click="zoomReset()" size="small" style="margin-top:43px">
                                 <el-icon style="margin-right: 5px"><ZoomOut /></el-icon> Zoom reset</el-button>   
                         </div>
@@ -363,7 +354,7 @@
                 <div id="emg-chart" style="width: 100%; height: 600px;"></div>
             </el-col>
             <el-col :span="1" style="margin-top:300px">
-                <el-button type="primary" circle @click="moveForward()" :disabled="(parseFloat(parseFloat(this.tileIndex)+0.5).toFixed(2)) > parseFloat((parseFloat(totalCells)).toFixed(2))"><el-icon><ArrowRight /></el-icon></el-button>
+                <el-button type="primary" circle @click="moveForward()" :disabled="(parseFloat(parseFloat(tileIndex)+0.5).toFixed(2)) > parseFloat((parseFloat(totalCells)).toFixed(2))"><el-icon><ArrowRight /></el-icon></el-button>
             </el-col>
             
         </el-row>
@@ -397,6 +388,9 @@
         Files
     },
     async mounted(){
+        console.log(this.tileIndex)
+        console.log(this.totalCells)
+
         if(this.$store.state.userType === 'advanced'){
             await this.getPredictions();
             await this.getThresholds();
@@ -530,12 +524,6 @@
                 end: Math.max(...this.emgTime)
             });
 
-            // Deactivate zoom mode on double-click
-            //this.emgChart.dispatchAction({
-            //    type: 'takeGlobalCursor',
-            //    key: 'dataZoomSelect',
-            //    dataZoomSelectActive: false
-            //});
         },
         async loadImages(version) {
             this.imgLoading = true
@@ -603,12 +591,6 @@
             console.log(this.selectionActive)
             if(this.selectionActive){
                 this.editButtonType = "primary"
-                //this.zoomDisabled = true
-            } else {
-                this.editButtonType = ""
-                //this.zoomDisabled = false
-            }
-            if(this.selectionActive===true){
                 this.zoomActive = false;
                 this.zoomButtonType = ""
                 // Deactivate zoom mode on double-click
@@ -626,15 +608,22 @@
                     }
                 });
             } else {
-                console.log("ZOOOOOOOM: ", this.zoomActive)
+                this.editButtonType = ""
                 this.emgChart.dispatchAction({
                     type: 'brush',
                     areas: []
                 });
+
+                // Fully deactivate the brush selection mode
+                this.emgChart.dispatchAction({
+                    type: 'takeGlobalCursor',
+                    key: 'brush',
+                    brushOption: {
+                        brushType: null,
+                        brushMode: null
+                    }
+                });
             }
-        },
-        clickCard(){
-            console.log("card clicked")
         },
         async updateEventType(key, value){
             const path = `http://127.0.0.1:5000/prediction-event-type/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
@@ -654,7 +643,6 @@
             await axios.patch(path, payload, {headers})
                 .then(() => {
                     console.log("Event type of prediction updated!")
-                    //updateMark areas?
 
                 })
                 .catch(err=>{
@@ -722,9 +710,6 @@
         async addNewEvent(form){
             console.log("Add event: ", form.start, form.end)
             console.log(this.current5minEvents)
-            //this.amountEvents ++;
-            //this.current5minEvents[key] = value
-            //await this.markEvent(this.eventForm.start, this.eventForm.end)
             const path = `http://127.0.0.1:5000/predict-events/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
             let payload= {};
             payload['start_s'] = form.start;
@@ -836,7 +821,7 @@
                         const startNorm = ((start - min) / (max - min)) * (300 - 0) + 0;
                         const endNorm = ((end - min) / (max - min)) * (300 - 0) + 0;
 
-                        // First, remove any existing markArea entries for this key
+                        // Remove any existing markArea entries for this key
                         option.series.forEach(series => {
                             if (series.markArea && series.markArea.data) {
                                 series.markArea.data = series.markArea.data.filter(area => area[0].name !== key);
@@ -916,7 +901,6 @@
         async moveForward(){
             console.log("MOVE FORWARD")
             this.tileIndex = (parseFloat(this.tileIndex) + 0.50).toFixed(2)
-            //console.log(this.tileIndex)
             
             console.log("length selected interval", this.selectedInterval.length)
             if(this.selectedInterval.length == 1){
@@ -933,7 +917,6 @@
                 this.selectedInterval.push([xCurrent, yCurrent, value])
             }
             else if(this.selectedInterval.length == 2){
-                //this.selectedInterval.shift();
                 console.log(this.selectedInterval)
                 const maxArray = this.selectedInterval.reduce((max, current) => {
                 // Primary condition: prioritize the array with a larger element at position 1
@@ -1110,9 +1093,9 @@
                 this.drawEMGLinePlot(); // Function to draw the EMG plot with the fetched data
             } catch (error) {
                 if (axios.isCancel(error)) {
-                console.log('Previous request canceled:', error.message);
+                    console.log('Previous request canceled:', error.message);
                 } else {
-                console.log(error);
+                    console.log(error);
                 }
             }
         },
@@ -1122,8 +1105,7 @@
 
             console.log("min: ", emgTimeMin)
             console.log("max: ", emgTimeMax)
-            //events = events.replace(/NaN/g, 'null');
-            //events = JSON.parse(events)
+
             console.log(typeof events)
 
             // Helper function to find the closest value in the emgTime array
@@ -1134,7 +1116,6 @@
             // Map start_s and end_s to the closest values in emgTime only if within range
             const mappedEvents = Object.keys(events).reduce((mapped, eventKey) => {
                 const event = events[eventKey];
-                //console.log(event)
                 // Only map if both start_s and end_s are within the emgTime range
                 if (event.start_s >= emgTimeMin && event.end_s <= emgTimeMax) {
                 const closestStart = findClosest(event.start_s, emgTime);
@@ -1180,7 +1161,6 @@
         
         zoomToEvent(key, value){
             if (this.emgChart) {
-                //this.basicStyle = {}
                 let min = Math.min(...this.emgTime)
                 let max = Math.ceil(Math.max(...this.emgTime))
                 const start = parseFloat(value['start_s']);
@@ -1211,7 +1191,6 @@
             let hrvLfHf = this.hrvLfHf;
             let hrvMean = this.hrvMean;
             let hrvSdnn = this.hrvSdnn;
-            //let markAreaData = [];
             let markAreaDataMR = [];
             let markAreaDataML = [];
             let events = {}
@@ -1280,17 +1259,10 @@
                             let title = "";
                             let startEvent = null;
                             let endEvent = null;
-                            //let eventMeanFreqMr = null;
-                            //let eventMeanFreqMl = null;
 
-
-                            //console.log("PARAMS: ", params)
                             let xPoint = parseFloat(params[0].axisValue);
                             let yPoint = params[0].value;
-                            //console.log(this.tileIndex)
-                            //let factor = this.tileIndex + 1.00
                             const formattedValue = yPoint.toFixed(2);
-                            //console.log(stdMR)
                             
                             let currentStdMR = stdMR[params[0].dataIndex].toFixed(2);
                             let currentStdML = stdML[params[1].dataIndex].toFixed(2);
@@ -1306,16 +1278,12 @@
 
                             if(Object.keys(events).length > 0){
                                 for (const [key, value] of Object.entries(events)){
-                                    //console.log(value['start_s'], value['end_s'])
-                                    //console.log(xPoint, yPoint)
                                     if(value['start_s'] <= xPoint && value['end_s'] >= xPoint){
                                         title = "Event " + key.slice(1)
                                         console.log("dentro")
                                         startEvent = value['start_s']
                                         endEvent = value ['end_s']
 
-                                        //eventMeanFreqMr = (value['mnf_mr']).toFixed(2);
-                                        //eventMeanFreqMl = (value ['mnf_ml']).toFixed(2);
 
                                     }
                                 }
@@ -1324,6 +1292,7 @@
                             // Return the tooltip HTML
                             return `
                                 ${title ? `<strong>${title}</strong><br>Start: ${startEvent.toFixed(2)} s, End: ${endEvent.toFixed(2)} s<br>Duration: ${(endEvent-startEvent).toFixed(2)} s<hr>` : ''}
+                                <b>EMG Metrics</b><br>
                                 ${params[0].marker}  <b>MR</b> : ${formattedValue}<br>
                                 MVC: ${mvcMR}<br>
                                 SD: ${currentStdMR}<br>
@@ -1402,16 +1371,16 @@
                 ],
                 grid: [
                 {
-                    left: 90,  // Align the first chart from the left side
-                    right: 70, // Align the first chart from the right side
-                    top: 40,   // Provide some space from the top of the container
-                    height: '35%',  // Set the height of the first chart as 35% of the available space
+                    left: 90,
+                    right: 70,
+                    top: 40,
+                    height: '35%',
                 },
                 {
-                    left: 90,  // Align the second chart from the left side
-                    right: 70, // Align the second chart from the right side
-                    top: '50%', // Start the second chart at the middle (50% of the height)
-                    height: '35%', // Set the height of the second chart as 35% of the available space
+                    left: 90,
+                    right: 70,
+                    top: '50%',
+                    height: '35%',
                 }
                 ],
                 xAxis: [
@@ -1450,7 +1419,7 @@
                     {
                         gridIndex: 0,
                         type: 'value',
-                        name: 'Amplitude (V)',
+                        name: 'Amplitude',
                         max: Math.max(Math.ceil(this.maxAmplitudeMR), Math.ceil(this.maxAmplitudeML), this.mvcMR, this.mvcML),
                         yAxisIndex: 0,
                         scale: true,
@@ -1461,7 +1430,7 @@
                     {
                         gridIndex: 1,
                         type: 'value',
-                        name: 'Amplitude (V)',
+                        name: 'Amplitude',
                         max: Math.max(Math.ceil(this.maxAmplitudeMR), Math.ceil(this.maxAmplitudeML), this.mvcMR, this.mvcML),
                         scale: true,
                         splitArea: {
@@ -1488,34 +1457,34 @@
                     },
                     markArea: {
                         itemStyle: {
-                            color: 'rgba(133.4, 206.2, 97.4, 0.2)',  // Light purple with transparency
-                            borderColor: 'rgb(133.4, 206.2, 97.4)',  // Border color of the mark area
-                            borderWidth: 1,  // Border width
+                            color: 'rgba(133.4, 206.2, 97.4, 0.2)', 
+                            borderColor: 'rgb(133.4, 206.2, 97.4)',
+                            borderWidth: 1,
                         },
                         data: markAreaDataMR
                     },
                     markLine: {
                         data: [
                             {
-                                yAxis: (this.thresholdMr*this.mvcMR/100).toFixed(2), // Set the threshold value here
+                                yAxis: (this.thresholdMr*this.mvcMR/100).toFixed(2),
                                 label: {
-                                    formatter: 'Threshold MR', // Customize label
-                                    position: 'start', // Position label at the end of the line
+                                    formatter: 'Threshold MR',
+                                    position: 'start',
                                 },
                                 lineStyle: {
-                                    color: '#a942e9', // Slightly opaque line for visibility
-                                    type: 'solid', // Change to 'dashed' if preferred
+                                    color: '#a942e9',
+                                    type: 'solid',
                                     width: 3
                                 }
                             },
                             {
-                                yAxis: this.mvcMR, // Set the threshold value here
+                                yAxis: this.mvcMR,
                                 label: {
-                                    formatter: 'MVC MR', // Customize label
-                                    position: 'start', // Position label at the end of the line
+                                    formatter: 'MVC MR',
+                                    position: 'start',
                                 },
                                 lineStyle: {
-                                    color: 'rgba(255, 127, 80, 0.7)', // Customize line color
+                                    color: 'rgba(255, 127, 80, 0.7)',
                                     type: 'dashed',
                                     width: 2
                                 }
@@ -1541,33 +1510,33 @@
                     },
                     markArea: {
                         itemStyle: {
-                            color: 'rgba(133.4, 206.2, 97.4, 0.2)',  // Light purple with transparency
-                            borderColor: 'rgba(133.4, 206.2, 97.4)',  // Border color of the mark area
-                            borderWidth: 1,  // Border width
+                            color: 'rgba(133.4, 206.2, 97.4, 0.2)', 
+                            borderColor: 'rgba(133.4, 206.2, 97.4)', 
+                            borderWidth: 1, 
                         },
                         data: markAreaDataML
                     },
                     markLine: {
                         data: [
                             {
-                                yAxis: (this.thresholdMl*this.mvcML/100).toFixed(2), // Set the threshold value here
+                                yAxis: (this.thresholdMl*this.mvcML/100).toFixed(2),
                                 label: {
-                                    formatter: 'Threshold ML', // Customize label
-                                    position: 'start', // Position label at the end of the line
+                                    formatter: 'Threshold ML',
+                                    position: 'start',
                                 },
                                 lineStyle: {
-                                    color: '#a942e9', // Slightly opaque line for visibility
-                                    type: 'solid', // Change to 'dashed' if preferred
+                                    color: '#a942e9',
+                                    type: 'solid',
                                     width: 3
                                 }
                             }, {
-                                yAxis: this.mvcML, // Set the threshold value here
+                                yAxis: this.mvcML,
                                 label: {
-                                    formatter: 'MVC ML', // Customize label
-                                    position: 'start', // Position label at the end of the line
+                                    formatter: 'MVC ML',
+                                    position: 'start',
                                 },
                                 lineStyle: {
-                                    color: 'rgba(255, 127, 80, 0.7)', // Customize line color
+                                    color: 'rgba(255, 127, 80, 0.7)',
                                     type: 'dashed',
                                     width: 2
                                 }
@@ -1589,38 +1558,11 @@
                     end: Math.max(...this.emgTime)
                 });
 
-                // Deactivate zoom mode on double-click
-                //this.emgChart.dispatchAction({
-                //    type: 'takeGlobalCursor',
-                //    key: 'dataZoomSelect',
-                //    dataZoomSelectActive: false
-                //});
             });
-            /*
-            document.getElementById('edit-button').addEventListener('click', () => {
-                if(this.selectionActive==true){
-                    this.emgChart.dispatchAction({
-                        type: 'takeGlobalCursor',
-                        key: 'brush',
-                        brushOption: {
-                            brushType: 'lineX',
-                            brushMode: 'single'
-                        }
-                    });
-                } else {
-                    this.emgChart.dispatchAction({
-                        type: 'brush',
-                        areas: []
-                    });
-                }
-                
-            });
-            */
 
             this.emgChart.on('brushSelected', this.handleBrushSelection);
         },
         handleBrushSelection(params) {
-            //this.selectionActive = true;
             const selected = params.batch[0];
             console.log("selected: ", selected)
             if (selected) {
@@ -1661,25 +1603,25 @@
                             markLine: {
                             data: [
                                 {
-                                    yAxis: (this.mvcMR*thresholdMr/100).toFixed(2), // Set the threshold value here
+                                    yAxis: (this.mvcMR*thresholdMr/100).toFixed(2), 
                                     label: {
-                                        formatter: 'Threshold MR', // Customize label
-                                        position: 'start', // Position label at the end of the line
+                                        formatter: 'Threshold MR', 
+                                        position: 'start', 
                                     },
                                         lineStyle: {
-                                        color: '#a942e9', // Slightly opaque line for visibility
-                                        type: 'solid', // Change to 'dashed' if preferred
+                                        color: '#a942e9', 
+                                        type: 'solid',
                                         width: 3
                                     }
                                 }, {
-                                        yAxis: this.mvcMR, // Set the threshold value here
+                                        yAxis: this.mvcMR, 
                                         label: {
-                                            formatter: 'MVC MR', // Customize label
-                                            position: 'start', // Position label at the end of the line
+                                            formatter: 'MVC MR', 
+                                            position: 'start', 
                                         },
                                         lineStyle: {
-                                            color: 'rgba(255, 127, 80, 0.7)', // Customize line color
-                                            type: 'solid' // Customize line type (solid, dashed, dotted, etc.)
+                                            color: 'rgba(255, 127, 80, 0.7)',
+                                            type: 'solid' 
                                         }
                                     }
                             ]
@@ -1710,25 +1652,25 @@
                             markLine: {
                             data: [
                                 {
-                                    yAxis: (this.mvcML*thresholdMl/100).toFixed(2), // Set the threshold value here
+                                    yAxis: (this.mvcML*thresholdMl/100).toFixed(2), 
                                     label: {
-                                        formatter: 'Threshold ML', // Customize label
-                                        position: 'start', // Position label at the end of the line
+                                        formatter: 'Threshold ML', 
+                                        position: 'start',
                                     },
                                     lineStyle: {
-                                        color: '#a942e9', // Slightly opaque line for visibility
-                                        type: 'solid', // Change to 'dashed' if preferred
+                                        color: '#a942e9', 
+                                        type: 'solid',
                                         width: 3
                                     }
                                 },{
-                                        yAxis: this.mvcML, // Set the threshold value here
+                                        yAxis: this.mvcML, 
                                         label: {
-                                            formatter: 'MVC ML', // Customize label
-                                            position: 'start', // Position label at the end of the line
+                                            formatter: 'MVC ML',
+                                            position: 'start', 
                                         },
                                         lineStyle: {
-                                            color: 'rgba(255, 127, 80, 0.7)', // Customize line color
-                                            type: 'solid' // Customize line type (solid, dashed, dotted, etc.)
+                                            color: 'rgba(255, 127, 80, 0.7)', 
+                                            type: 'solid' 
                                         }
                                     }
                             ]
@@ -1746,12 +1688,9 @@
             // Total number of cells based on the total duration in seconds
             const totalCells = Math.ceil(totalDurationInSeconds / cellDuration);
             this.totalCells = totalCells-1;
-            //let x = (parseFloat(totalCells)).toFixed(2)
-            //let y = (parseFloat(this.tileIndex) +0.5).toFixed(2)
-            //console.log(x, y)
-            //console.log(y > x)
+
+            console.log("total CELLS: ", totalCells)
             const numRows = Math.ceil(totalCells / cellsPerRow); // Total number of rows needed
-            //console.log(numRows);
 
             let heatmapData = [];
 
@@ -1763,16 +1702,13 @@
                     if (cellIndex >= totalCells) break; // Stop if we exceed the total number of cells
 
                     const value = 0;  // Default value
-                    heatmapData.push([col, row, value]); // Note: Col (x) first, then Row (y)
+                    heatmapData.push([col, row, value]);
                 }
             }
-            //console.log(events)
             if(Object.keys(events).length !== 0){
-                //events = events.replace(/NaN/g, 'null');
-                //events = JSON.parse(events)
-                // Now we will check the events to populate the heatmap data
+
+                // Check the events to populate the heatmap data
                 for (const eventKey in events) {
-                    //console.log("eventKey: ", eventKey)
                     const event = events[eventKey];
                     const start = event.start_s; // Start time of the event
                     const end = event.end_s;     // End time of the event
@@ -1785,13 +1721,12 @@
                             if (cellIndex >= totalCells) break; // Stop if we exceed total cells
 
                             // Calculate the start and end times for the current cell
-                            const cellStart = (col + (row * cellsPerRow)) * cellDuration; // Start time of the cell
-                            const cellEnd = cellStart + cellDuration; // End time of the cell
+                            const cellStart = (col + (row * cellsPerRow)) * cellDuration; 
+                            const cellEnd = cellStart + cellDuration;
 
                             // Check if the event falls within the cell's time range
                             if (start < cellEnd && end > cellStart) {
                                 // Increment the value for the corresponding cell
-                                //console.log("CIAOCIAO")
                                 if(events[eventKey].confirmed === true){
                                     heatmapData[cellIndex][2] += 1; // Increment the value at index 2 (the value field)
                                 }
@@ -1812,14 +1747,10 @@
 
             let heatMapData = this.generateHeatmapData(this.emgDataLengthS, this.predictions);
             let data = heatMapData["HM"]
-            //console.log(heatMapData)
+            console.log(heatMapData)
             let numRows = heatMapData["rows"]
 
             const sleepCycles = Array.from({length:numRows}, (_, i) => i + 1);
-
-            //let data = [[0,0,0], [4, 0, 0], [2,1,0], [2,2,0], [3,1,0], [0, 1, 0], [1, 0, 0], [1,1, 0], [2, 0, 0], [3, 0, 0], [8, 8, 0], [5,4,3], [6, 2, 3], [14,4,2],[17, 0, 0], [15,1,0], [12,1,0], [7,1,0], [6,1,0], [5,1,0], [4,2,0], [4,0,0], [4,1,0], [4,3,0], [4,4,0], [0,4,0], [1,4,0], [2,4,0], [14,3,0], [15,3,0], [16,3,0]]
-            //let selectedInterval = [[0,0,0]];
-
 
             option = {
                 tooltip: {
@@ -1831,9 +1762,9 @@
                     }
                 },
                 title: {
-                    text: 'Number of events', // Add a title for the visual maps
-                    right: '0%',  // Align it with the visual maps on the right
-                    top: '0%',      // Position the title just above the visual maps
+                    text: 'Number of events',
+                    right: '0%',
+                    top: '0%',    
                     show: (Object.keys(this.predictions).length  > 0),
                     textStyle: {
                         fontSize: 12,
@@ -1841,8 +1772,6 @@
                     }
                 },
                 grid: {
-                    //height: '50%',
-                    //top: '4%',
                     top: 35,
                     left:50,
                     right:120,
@@ -1876,9 +1805,9 @@
                     text: ['high', 'low'],
                     calculable: (Object.keys(this.predictions).length  > 0),
                     show: (Object.keys(this.predictions).length  > 0),
-                    orient: 'vertical', // Set orientation to vertical
-                    right: '6%', // Position on the right side
-                    top: '4%', // Adjust top to control vertical spacing
+                    orient: 'vertical', 
+                    right: '6%', 
+                    top: '4%', 
                 },
                 {
                     dimension: 2,
@@ -1899,7 +1828,6 @@
                     label: {
                         show: true,
                         formatter: function (params) {
-                            //console.log(params)
                             if(parseInt(params.data[2])>0){
                                 return params.data[2]
                             } else {
@@ -1973,6 +1901,8 @@
                     console.log("ssd data")
                     console.log(res.data)
                     this.ssdData = res.data;
+                    console.log("ssdData: ", this.ssdData)
+                    this.totalCells = this.ssdData.length-1;
                     this.ssdDataReceived = true;
 
                 })
@@ -2014,6 +1944,8 @@
 
             let maxY = this.getMax(this.ssdData, 'y');
 
+
+
             const sleepCycles = Array.from({length: maxY+1}, (_, i) => i + 1);
 
             console.log("sleep cycles: ", sleepCycles)
@@ -2021,10 +1953,6 @@
             let remData = this.ssdData.filter(this.isRem);
             let deepData = this.ssdData.filter(this.isDeep);
             let lightData = this.ssdData.filter(this.isLight);
-
-            //let allData = this.ssdData.map(function (item) {
-            //    return [item['x'], item['y'], Math.round(item['HRV_SDNN']), item['stage'],  item['HRV_LFHF']];
-            //})
 
             remData = remData
                 .map(function (item) {
@@ -2040,38 +1968,11 @@
                 .map(function (item) {
                 return [item['x'], item['y'], Math.round(item['HRV_SDNN']), item['stage'],  item['HRV_LFHF']];
             });
-            /*
-            if(JSON.stringify(this.selectedInterval) === JSON.stringify([[0,0,0]])){
-                console.log("TRUEEEEEEEEE")
-                // Function to find the item with x = 0 and y = 0
-                 const findData = (dataArray) => dataArray.find(item => item[0] === 0 && item[1] === 0);
-
-                // Look for the item in all three data arrays
-                const remItem = findData(remData);
-                const deepItem = findData(deepData);
-                const lightItem = findData(lightData);
-
-                // Check which item exists and set selectedInterval accordingly
-                if (remItem) {
-                    this.selectedInterval = [remItem]; // If found in remData
-                } else if (deepItem) {
-                    this.selectedInterval = [deepItem]; // If found in deepData
-                } else if (lightItem) {
-                    this.selectedInterval = [lightItem]; // If found in lightData
-                }
-                console.log(this.selectedInterval)
-            }
-
-            console.log("light data: ", lightData)
-            */
 
             option = {
                 tooltip: {
                     position: 'top',
                     formatter: function (params) {
-                        //if (params.seriesIndex === 3) {
-                        //    return ''; // Return empty for series 3 to exclude from tooltip
-                        //}
                         let fiveMinInterval = parseFloat(params.data[0])+(params.data[1]*18)
                         let cycle = parseInt(params.data[1])+1
                         console.log(params)
@@ -2082,9 +1983,9 @@
                     }
                 },
                 title: {
-                    text: 'Uncertainity level', // Add a title for the visual maps
-                    right: '0%',  // Align it with the visual maps on the right
-                    top: '0%',      // Position the title just above the visual maps
+                    text: 'Uncertainity level',
+                    right: '0%',
+                    top: '0%',
                     textStyle: {
                         fontSize: 14,
                         fontWeight: 'bold'
@@ -2116,114 +2017,34 @@
                         show: true
                     }
                 },
-                /*
-                visualMap: [
-                {
-                    type: 'continuous',
-                    dimension: 2,
-                    seriesIndex: 0,
-                    min: Math.min(...remData.map(item => item[2])), // Min value of HRV_SDNN for NREM
-                    max: Math.max(...remData.map(item => item[2])), // Max value of HRV_SDNN for NREM
-                    inRange: {
-                        color: ['#d916b9', '#dcabd4']
-                    },
-                    text: ["high uncertainty (high SD)", "low uncertainity (low SD)"],
-                    outOfRange: {
-                        color: 'transparent'
-                    },
-                    controller: {
-                        inRange: { color: ['#d916b9', '#dcabd4'] }
-                    },
-                    calculable: true,
-                    orient: 'horizontal',
-                    left: 'center',
-                    //bottom: '24%',
-                    bottom: '10%'
-                },
-                {
-                    type: 'continuous',
-                    dimension: 2,
-                    seriesIndex: 1,
-                    min: Math.min(...lightData.map(item => item[2])), // HRV_SDNN for REM
-                    max: Math.max(...lightData.map(item => item[2])),
-                    inRange: {
-                        color: ['#12dada', '#b0d8d8'] // Blue scale for REM
-                    },
-                    outOfRange: {
-                        color: 'transparent'
-                    },
-                    controller: {
-                        inRange: { color: ['#12dada', '#b0d8d8'] }
-                    },
-                    text: ["high uncertainty (high SD)", "low uncertainity (low SD)"],
-                    calculable: true,
-                    orient: 'horizontal',
-                    left: 'center',
-                    //bottom: '30%',
-                    bottom: '20%'
-                },
-                {
-                    type: 'continuous',
-                    dimension: 2,
-                    seriesIndex: 2,
-                    min: Math.min(...deepData.map(item => item[2])), // HRV_SDNN for REM
-                    max: Math.max(...deepData.map(item => item[2])),
-                    inRange: {
-                        color: ['#2b08b9', '#715fb8'] // Blue scale for REM
-                    },
-                    outOfRange: {
-                        color: 'transparent'
-                    },
-                    controller: {
-                        inRange: { color: ['#2b08b9','#715fb8'] }
-                    },
-                    text: ["high uncertainty (high SD)", "low uncertainity (low SD)"],
-                    calculable: true,
-                    orient: 'horizontal',
-                    left: 'center',
-                    //bottom: '30%',
-                    bottom:'30%'
-                },
-                {
-                    dimension: 2,
-                    seriesIndex : 3,
-                    calculable: false,
-                    show: false,
-                    inRange: {
-                        color: []
-                    }
-                }
-                ],
-                */
                 visualMap: [
                     {
                         type: 'continuous',
                         dimension: 2,
                         seriesIndex: 0,
-                        min: Math.min(...remData.map(item => item[2])), // Min value of HRV_SDNN for NREM
-                        max: Math.max(...remData.map(item => item[2])), // Max value of HRV_SDNN for NREM
+                        min: Math.min(...remData.map(item => item[2])), // Min value of HRV_SDNN for REM
+                        max: Math.max(...remData.map(item => item[2])), // Max value of HRV_SDNN for REM
                         inRange: {
-                            color: ['#d916b9', '#dcabd4'] // Purple scale
+                            color: ['#d916b9', '#dcabd4']
                         },
-                        //text: ["high uncertainty (high SD)", "low uncertainty (low SD)"],
                         text: ["high", "low"],
                         outOfRange: {
                             color: 'transparent'
                         },
                         inverse: true,
                         calculable: true,
-                        orient: 'vertical', // Set orientation to vertical
-                        right: '0.5%', // Position on the right side
-                        top: '4%', // Adjust top to control vertical spacing
+                        orient: 'vertical',
+                        right: '0.5%', 
+                        top: '4%', 
                     },
                     {
                         type: 'continuous',
                         dimension: 2,
                         seriesIndex: 1,
-                        min: Math.min(...lightData.map(item => item[2])), // Min value for REM
-                        max: Math.max(...lightData.map(item => item[2])), // Max value for REM
+                        min: Math.min(...lightData.map(item => item[2])), // Min value of HRV_SDNN for Light
+                        max: Math.max(...lightData.map(item => item[2])), // Max value of HRV_SDNN for Light
                         inRange: {
-                            color: ['#12dada', '#c7e5e5'] // Blue scale for REM
+                            color: ['#12dada', '#c7e5e5']
                         },
                         text: ["high", "low"],
                         outOfRange: {
@@ -2231,18 +2052,18 @@
                         },
                         inverse: true,
                         calculable: true,
-                        orient: 'vertical', // Set orientation to vertical
-                        right: '14%', // Align it with the other visualMap
-                        top: '4%', // Adjust top to create space below the first visualMap
+                        orient: 'vertical',
+                        right: '14%',
+                        top: '4%',
                     },
                     {
                         type: 'continuous',
                         dimension: 2,
                         seriesIndex: 2,
-                        min: Math.min(...deepData.map(item => item[2])), // Min value for Deep
-                        max: Math.max(...deepData.map(item => item[2])), // Max value for Deep
+                        min: Math.min(...deepData.map(item => item[2])), // Min value of HRV_SDNN for Deep
+                        max: Math.max(...deepData.map(item => item[2])), // Max value of HRV_SDNN for Deep
                         inRange: {
-                            color: ['#2b08b9', '#b1a8d8'] // Blue/purple scale for Deep
+                            color: ['#2b08b9', '#b1a8d8']
                         },
                         text: ["high", "low"],
                         outOfRange: {
@@ -2250,9 +2071,9 @@
                         },
                         inverse: true,
                         calculable: true,
-                        orient: 'vertical', // Set orientation to vertical
-                        right: '7%', // Align it with the other visualMap
-                        top: '4%', // Adjust top to create space below the second visualMap
+                        orient: 'vertical',
+                        right: '7%',
+                        top: '4%',
                     },
                     {
                         dimension: 2,
@@ -2264,8 +2085,6 @@
                         }
                     }
                 ],
-
-
                 series: [
                     {
                     name: 'REM data',
@@ -2373,13 +2192,9 @@
                 // Set the option once after updating the data
                 chartInstance.setOption(option);
 
-                console.log("SELECTED INTERVAL", this.selectedInterval);
-
                 // Calculate the five-minute interval
                 let fiveMinInterval = (params.data[0]) + (params.data[1] * 18);
-                console.log(fiveMinInterval);
                 this.tileIndex = fiveMinInterval.toFixed(2);
-                console.log("tile Index: ", this.tileIndex);
 
                 // Call getData with the five-minute interval
                 this.getData(fiveMinInterval.toFixed(2));
