@@ -1,8 +1,6 @@
 <template>
-    <el-row style="margin-bottom: -20px;">
-        <el-col :offset="18">
-            <el-button @click="editSelected"><p v-if="isEditMode">Save</p><p v-else>Edit</p></el-button>
-        </el-col>
+    <el-row justify="center">
+        <el-button @click="editSelected"><p v-if="isEditMode">Save</p><p v-else>Edit intervals of interest</p></el-button>
     </el-row>
     <el-row v-loading="!ssdDataReceived" :element-loading-text="this.getLoadingTime()" justify="center">
         <div id="ssd" style="width: 1500px; height: 800px;"></div>
@@ -51,7 +49,7 @@ export default{
             }
         },
         async getSsdData(){
-            const path = `http://127.0.0.1:5000/ssd/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`
+            const path = `http://127.0.0.1:5000/ssd/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}/200`
             const headers = {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json'
@@ -138,7 +136,7 @@ export default{
             let option;
 
             const minutes = [
-                5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 80, 85, 90
+                5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90
             ];            
 
             let maxY = this.getMax(this.ssdData, 'y');
@@ -177,8 +175,8 @@ export default{
                 tooltip: {
                     position: 'top',
                     formatter: function (params) {
-                        return `${params.value[3]}<br />
-                                ${params.marker}: ${params.value[4].toFixed(2)} ± ${params.value[2]}`;
+                        return `<b>${(params.value[3]).toUpperCase()}</b><br />
+                                ${params.marker}: ${params.value[4].toFixed(2)} (LF/HF) ± ${params.value[2]} (SD)`;
                     }
                 },
                 grid: {
@@ -187,6 +185,7 @@ export default{
                 },
                 xAxis: {
                     type: 'category',
+                    name: "minutes",
                     data: minutes,
                     splitArea: {
                         show: true
@@ -194,6 +193,7 @@ export default{
                 },
                 yAxis: {
                     type: 'category',
+                    name:"Sleep cycle", 
                     data: sleepCycles,
                     inverse: true,
                     show: true,

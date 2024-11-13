@@ -11,21 +11,34 @@
             </router-link>
         </el-col>
     </el-row>
-    <el-row justify="center" style="margin-bottom: 100px">
+    <el-row justify="center" style="margin-bottom: 20px">
         <el-col :span="10">
             <PipelineStepper :step="1" />
         </el-col>
     </el-row>
     
-<el-row justify="center"><h1>Sleep stage Detection Page</h1></el-row>
-<el-row justify="center"> <h3>Patient {{ this.$store.state.patientId }}, Week {{ this.$store.state.weekId }}, file {{ this.$store.state.file }}, size {{ this.$store.state.fileSize }} GB</h3></el-row>
+<el-row>
+    <el-col  :span="17" style="text-align: center">
+        <h1>Patient {{ this.$store.state.patientId }}, Week {{ this.$store.state.weekId }}, file {{ this.$store.state.file }}, size {{ this.$store.state.fileSize }} GB</h1>
+    </el-col>
+    <el-col :span="4"></el-col>
+</el-row>
 
-<SSDHeatMap />
-
+<el-row>
+    <el-col :span="17">
+        <SSDHeatMap />
+    </el-col>
+    <el-col :span="4" style="margin-top: 95px">
+        <SleepHeatMapLegend />
+    </el-col>
+</el-row>
 </template>
 
 <script>
 import SSDHeatMap from '../components/SSDHeatMap.vue'
+import PipelineStepper from '../components/PipelineStepper.vue'
+import SleepHeatMapLegend from '../components/SleepHeatMapLegend.vue';
+
 
 export default{
     name: 'SleepStageDetection',
@@ -36,7 +49,9 @@ export default{
         console.log(this.$store.state.fileSize)
     },
     components: {
-        SSDHeatMap
+        SSDHeatMap,
+        PipelineStepper,
+        SleepHeatMapLegend
     }
 }
 </script>
