@@ -1,6 +1,6 @@
 <template>
     <el-row justify="center" style="margin-bottom: 100px;">
-        <h1>Sensor Data Labeling and Analysis Tool</h1>
+        <h1>Bruxism Events Labeling Tool</h1>
     </el-row>
     <el-row justify="center" style="margin-bottom: 100px;">
         <el-col :span="10" :offset="1">
