@@ -30,20 +30,25 @@ the refinement of the model.
 ## Visuals
 ![BELT demo](BELT-demo.gif)
 
-
-
-
 ## Installation
+
 ### Backend
-- Inside back-end folder: ``python -m venv .venv``
+- Inside back-end folder: ``python3 -m venv .venv``
 - macOS: ``source .venv/bin/activate``
 - Windows: ``.venv\Scripts\activate``
-- ``pip install Flask Flask-Cors``
-- Define location of flask app (Windows): ``set FLASK_APP=run.py``, ``$env:FLASK_APP = "run.py"``, ``flask run``
+- ``pip install -r requirements.txt``
+- Set up environment variables by creating a `.env` file in the `backend` folder with: ``echo "DATABASE_URL=postgresql://postgres@localhost:5432/bruxit" > .env``
+- Start PostgreSQL:
+  - macOS: ``brew services start postgresql@14``
+  - Windows: ``pg_ctl -D "C:\Program Files\PostgreSQL\14\data" start``
+- Create the database: ``psql -h localhost -p 5432 -U postgres -c "CREATE DATABASE bruxit;"``
 - Initialize database: ``flask db init``
 - Migrate database: ``flask db migrate``
 - Upgrade database: ``flask db upgrade``
-
+- Define location of flask app:
+  - macOS/Linux: ``export FLASK_APP=run.py``
+  - Windows: ``set FLASK_APP=run.py``, ``$env:FLASK_APP = "run.py"``
+- Run the app: ``flask run``
 
 ### Frontend
 - ``npm install -g @vue/cli``
@@ -52,3 +57,4 @@ the refinement of the model.
 - ``npm install --save vuex-persist``
 - ``npm install localforage``
 - ``npm i pouchdb-utils``
+- ``npm run serve``

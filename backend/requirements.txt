@@ -1,0 +1,13 @@
+python-dotenv==1.0.1
+Flask==3.1.0
+Flask-Cors==5.0.1
+Flask-Migrate==4.1.0
+Flask-SQLAlchemy==3.1.1
+neurokit2==0.2.10
+pandas==2.2.3
+polars-lts-cpu==1.26.0
+psycopg2==2.9.10
+xgboost==3.0.0
+joblib==1.4.2
+scikit-learn==1.6.1
+openpyxl==3.1.5

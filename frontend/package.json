@@ -21,7 +21,7 @@
     "plotly.js-dist": "^2.34.0",
     "pouchdb-utils": "^9.0.0",
     "vue": "^3.2.13",
-    "vue-router": "^4.4.0",
+    "vue-router": "^4.5.0",
     "vuex": "^4.0.2",
     "vuex-persist": "^3.1.3"
   },
