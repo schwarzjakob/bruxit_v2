@@ -1,22 +1,22 @@
-from . import db
+from extensions import db
 
 
 class NightDuration(db.Model):
-    __tablename__ = 'night_duration'
+    __tablename__ = "night_duration"
     id = db.Column(db.Integer, primary_key=True)
     patient_id = db.Column(db.Integer, nullable=False)
     week = db.Column(db.String(50), nullable=False)
     file = db.Column(db.String(50), unique=True, nullable=False)
     seconds = db.Column(db.Float, nullable=False)
-    duration = db.Column(db.Interval, nullable = False)
-    #last_index = db.Column(db.Integer, nullable=False)
+    duration = db.Column(db.Interval, nullable=False)
+    # last_index = db.Column(db.Integer, nullable=False)
 
     def __repr__(self):
-        return f'<Patient {self.patient_id}>: week {self.week}, file: {self.file}, seconds: {self.seconds}, duration: {self.duration}'
+        return f"<Patient {self.patient_id}>: week {self.week}, file: {self.file}, seconds: {self.seconds}, duration: {self.duration}"
 
 
 class SSD(db.Model):
-    __tablename__ = 'ssd'
+    __tablename__ = "ssd"
     id = db.Column(db.Integer, primary_key=True)
     patient_id = db.Column(db.Integer, nullable=False)
     week = db.Column(db.String(50), nullable=False)
@@ -27,8 +27,9 @@ class SSD(db.Model):
     HRV_SDNN = db.Column(db.Float, nullable=False)
     stage = db.Column(db.String(50), nullable=False)
 
+
 class MVC(db.Model):
-    __tablename__ = 'mvc'
+    __tablename__ = "mvc"
     id = db.Column(db.Integer, primary_key=True)
     patient_id = db.Column(db.Integer, nullable=False)
     week = db.Column(db.String(50), nullable=False)
@@ -36,8 +37,9 @@ class MVC(db.Model):
     sensor = db.Column(db.String(50), nullable=False)
     mvc = db.Column(db.Float, nullable=False)
 
+
 class Threshold(db.Model):
-    __tablename__ = 'threshold'
+    __tablename__ = "threshold"
     id = db.Column(db.Integer, primary_key=True)
     patient_id = db.Column(db.Integer, nullable=False)
     week = db.Column(db.String(50), nullable=False)
@@ -45,8 +47,9 @@ class Threshold(db.Model):
     sensor = db.Column(db.String(50), nullable=False)
     threshold = db.Column(db.Integer, nullable=False)
 
+
 class Settings(db.Model):
-    __tablename__ = 'settings'
+    __tablename__ = "settings"
     id = db.Column(db.Integer, primary_key=True)
     emg_right_name = db.Column(db.String(50), nullable=False)
     emg_left_name = db.Column(db.String(50), nullable=False)
@@ -60,19 +63,19 @@ class Settings(db.Model):
 
 
 class Prediction(db.Model):
-    __tablename__ = 'prediction'
+    __tablename__ = "prediction"
     id = db.Column(db.Integer, primary_key=True)
     patient_id = db.Column(db.Integer, nullable=False)
     week = db.Column(db.String(50), nullable=False)
     file = db.Column(db.String(50), nullable=False)
     name = db.Column(db.String(50), nullable=False)
     start_s = db.Column(db.Float, nullable=False)
-    end_s  = db.Column(db.Float, nullable=False)
-    std_mr  = db.Column(db.Float, nullable=True)
+    end_s = db.Column(db.Float, nullable=False)
+    std_mr = db.Column(db.Float, nullable=True)
     std_ml = db.Column(db.Float, nullable=True)
-    var_mr  = db.Column(db.Float, nullable=True)
-    var_ml  = db.Column(db.Float, nullable=True)
-    rms_mr  = db.Column(db.Float, nullable=True)
+    var_mr = db.Column(db.Float, nullable=True)
+    var_ml = db.Column(db.Float, nullable=True)
+    rms_mr = db.Column(db.Float, nullable=True)
     rms_ml = db.Column(db.Float, nullable=True)
     mav_mr = db.Column(db.Float, nullable=True)
     mav_ml = db.Column(db.Float, nullable=True)
@@ -81,7 +84,7 @@ class Prediction(db.Model):
     wl_mr = db.Column(db.Float, nullable=True)
     wl_ml = db.Column(db.Float, nullable=True)
     aac_mr = db.Column(db.Float, nullable=True)
-    aac_ml  = db.Column(db.Float, nullable=True)
+    aac_ml = db.Column(db.Float, nullable=True)
     dasdv_mr = db.Column(db.Float, nullable=True)
     dasdv_ml = db.Column(db.Float, nullable=True)
     # zc_mr = db.Column(db.Float, nullable=True)
@@ -90,7 +93,7 @@ class Prediction(db.Model):
     wamp_ml = db.Column(db.Float, nullable=True)
     fr_mr = db.Column(db.Float, nullable=True)
     fr_ml = db.Column(db.Float, nullable=True)
-    mnp_mr = db.Column(db.Float, nullable=True) 
+    mnp_mr = db.Column(db.Float, nullable=True)
     mnp_ml = db.Column(db.Float, nullable=True)
     tot_mr = db.Column(db.Float, nullable=True)
     tot_ml = db.Column(db.Float, nullable=True)
@@ -101,7 +104,7 @@ class Prediction(db.Model):
     pkf_mr = db.Column(db.Float, nullable=True)
     pkf_ml = db.Column(db.Float, nullable=True)
     HRV_mean = db.Column(db.Float, nullable=True)
-    HRV_median = db.Column(db.Float, nullable=True) 
+    HRV_median = db.Column(db.Float, nullable=True)
     HRV_sdnn = db.Column(db.Float, nullable=True)
     HRV_min = db.Column(db.Float, nullable=True)
     HRV_max = db.Column(db.Float, nullable=True)
