@@ -29,8 +29,9 @@ import pandas as pd
 import polars as pl
 import numpy as np
 import math
-from utils.utils import *
-from models.models import SSD, Settings, db
+from src.utils.utils import *
+from src.models.sleep_stage_segment import SleepStageSegment
+from src.extensions import db
 import os
 
 
@@ -162,7 +163,7 @@ def HRV_analysis(patient_id, week, file, sampling_rate):
     hrv_with_coords["stage"] = hrv_with_coords["HRV_LFHF"].apply(categorize_sleep_stage)
 
     # Add sleep stage detection to DB
-    add_SSD_to_db(patient_id, week, file, hrv_with_coords)
+    add_sleep_stage_segments_to_db(patient_id, week, file, hrv_with_coords)
 
     print(hrv_with_coords)
 
@@ -220,16 +221,16 @@ def return_HRV_analysis(patient_id, week_id, filename, sampling_rate):
     hrv_with_coords["selected"] = hrv_with_coords["stage"].apply(find_selected_tiles)
 
     # Add sleep stage detection to DB
-    add_SSD_to_db(patient_id, week_id, filename, hrv_with_coords)
+    add_sleep_stage_segments_to_db(patient_id, week_id, filename, hrv_with_coords)
 
     print(hrv_with_coords)
 
     return hrv_with_coords.to_json(orient="records")
 
 
-def add_SSD_to_db(patient_id, week_id, filename, df):
+def add_sleep_stage_segments_to_db(patient_id, week_id, filename, df):
     for index, row in df.iterrows():
-        ssd = SSD(
+        sleep_stage_segment = SleepStageSegment(
             patient_id=patient_id,
             week=week_id,
             file=filename,
@@ -240,5 +241,5 @@ def add_SSD_to_db(patient_id, week_id, filename, df):
             stage=row["stage"],
         )
 
-        db.session.add(ssd)
+        db.session.add(sleep_stage_segment)
         db.session.commit()

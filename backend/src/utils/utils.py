@@ -6,7 +6,10 @@ import os
 import re
 from collections import defaultdict
 import datetime
-from models.models import NightDuration, MVC, Prediction, Settings, db
+from src.extensions import db
+from src.models.night_duration import NightDuration
+from src.models.event_prediction import EventPrediction
+from src.models.settings import Settings
 import math
 from sklearn.preprocessing import MinMaxScaler
 import matplotlib
@@ -468,7 +471,7 @@ def add_new_prediction(
     name,
     metrics,
 ):
-    new_prediction = Prediction(
+    new_prediction = EventPrediction(
         patient_id=patient_id,
         week=week,
         file=file,

@@ -1,10 +1,10 @@
-# src/backend.py
-
 from flask import Flask, jsonify
-from config import Config
-from extensions import db, migrate, cors
-from blueprints.routes import main  # TODO: Split routes blueprint into respective blueprints
-from blueprints.auth import auth  # your “auth” blueprint
+from src.config import Config
+from src.extensions import db, migrate, cors
+from src.blueprints.routes import (
+    main,
+)  # TODO: Split routes blueprint into respective blueprints
+from src.blueprints.auth import auth
 
 
 def create_app():

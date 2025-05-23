@@ -1,10 +1,18 @@
 from flask import Blueprint, request, send_from_directory, abort, jsonify, make_response
-from models.models import Threshold, NightDuration, SSD, MVC, Prediction, Settings, db
-from utils.utils import *
-from ssd import *
+from src.extensions import db
+from src.models.event_prediction import EventPrediction
+from src.models.maximum_voluntary_contraction import MaximumVoluntaryContraction
+from src.models.night_duration import NightDuration
+from src.models.sensor_threshold import SensorThreshold
+from src.models.settings import Settings
+from src.models.sleep_stage_segment import SleepStageSegment
+
+from src.utils.utils import *
+from src.ssd import *
 import psycopg2
 from psycopg2.extras import execute_values
-import time, io
+import time
+import io
 from sqlalchemy import create_engine
 import time
 import xgboost as xgb
@@ -85,7 +93,9 @@ def get_patient_data():
 )
 def get_ssd(patient_id, week, filename, sampling_rate):
 
-    results = SSD.query.filter_by(patient_id=patient_id, week=week, file=filename).all()
+    results = SleepStageSegment.query.filter_by(
+        patient_id=patient_id, week=week, file=filename
+    ).all()
     if results:
         ssd = [
             {
@@ -114,22 +124,22 @@ def patient_threshold(patient_id, week, file):
     if request.method == "GET":
         emg_right_name = get_settings().emg_right_name  # 'MR'
         emg_left_name = get_settings().emg_left_name  # 'ML'
-        threshold_db = Threshold.query.filter_by(
+        sensor_threshold_record = SensorThreshold.query.filter_by(
             patient_id=patient_id, week=week, file=file
         ).all()
-        if threshold_db:
+        if sensor_threshold_record:
             result = {}
-            if len(threshold_db) == 2:
-                for tr in threshold_db:
-                    result[tr.sensor] = tr.threshold
+            if len(sensor_threshold_record) == 2:
+                for tr in sensor_threshold_record:
+                    result[tr.sensor] = tr.threshold_value
 
-            if len(threshold_db) == 1:
-                if threshold_db[0].sensor == emg_right_name:
-                    result[emg_right_name] = threshold_db[0].threshold
+            if len(sensor_threshold_record) == 1:
+                if sensor_threshold_record[0].sensor == emg_right_name:
+                    result[emg_right_name] = sensor_threshold_record[0].threshold_value
                     result[emg_left_name] = 10
 
-                if threshold_db[0].sensor == emg_left_name:
-                    result[emg_left_name] = threshold_db[0].threshold
+                if sensor_threshold_record[0].sensor == emg_left_name:
+                    result[emg_left_name] = sensor_threshold_record[0].threshold_value
                     result[emg_right_name] = 10
 
         else:
@@ -146,25 +156,25 @@ def patient_threshold(patient_id, week, file):
 
             }
         """
-        threshold = request.json["threshold"]
+        threshold_value = request.json["threshold"]
         sensor = request.json["sensor"]
-        threshold_db = Threshold.query.filter_by(
+        sensor_threshold_record = SensorThreshold.query.filter_by(
             patient_id=patient_id, week=week, file=file, sensor=sensor
         ).first()
-        if not threshold_db:
+        if not sensor_threshold_record:
             print("threshold not in db!")
-            threshold_db = Threshold(
+            sensor_threshold_record = SensorThreshold(
                 patient_id=patient_id,
                 week=week,
                 file=file,
                 sensor=sensor,
-                threshold=threshold,
+                threshold_value=threshold_value,
             )
-            db.session.add(threshold_db)
+            db.session.add(sensor_threshold_record)
             db.session.commit()
 
         else:
-            threshold_db.threshold = threshold
+            sensor_threshold_record.threshold_value = threshold_value
             db.session.commit()
 
         return "threshold updated succesffully", 200
@@ -173,7 +183,7 @@ def patient_threshold(patient_id, week, file):
 @main.route("/download-events-csv", methods=["GET"])
 def download_events_csv():
     # Create a pandas DataFrame with your data
-    predictions = Prediction.query.filter_by(confirmed=True)
+    predictions = EventPrediction.query.filter_by(confirmed=True)
     prediction_data = []
 
     for prediction in predictions:
@@ -352,23 +362,29 @@ def get_night_duration(patient_id, week, file):
         return {"duration_s": night_duration.seconds}, 200
 
 
-@main.route("/mvc/<int:patient_id>/<string:week>/<string:file>", methods=["GET"])
+@main.route(
+    "/mvc/<int:patient_id>/<string:week>/<string:file>",
+    methods=["GET"],
+)
 def get_mvc(patient_id, week, file):
     emg_right_name = get_settings().emg_right_name  # 'MR'
     emg_left_name = get_settings().emg_left_name  # 'ML'
 
-    mvc_mr = MVC.query.filter_by(
+    mvc_mr = MaximumVoluntaryContraction.query.filter_by(
         patient_id=patient_id, week=week, file=file, sensor=emg_right_name
     ).first()
-    mvc_ml = MVC.query.filter_by(
+    mvc_ml = MaximumVoluntaryContraction.query.filter_by(
         patient_id=patient_id, week=week, file=file, sensor=emg_left_name
     ).first()
 
     if mvc_mr is None or mvc_ml is None:
-        return "No MVC for this night.", 404
+        return "No MaximumVoluntaryContraction for this night.", 404
 
     else:
-        return {"mvc_mr": mvc_mr.mvc, "mvc_ml": mvc_ml.mvc}, 200
+        return {
+            "mvc_mr": mvc_mr.mvc,
+            "mvc_ml": mvc_ml.mvc,
+        }, 200
 
 
 @main.route(
@@ -416,7 +432,7 @@ def downsample_data(patient_id, week, file):
             patient_id, week, file, len(mr), sampling_rate=original_sampling_rate
         )
 
-        print("Extract MVC")
+        print("Extract MaximumVoluntaryContraction")
 
         last_index = int(loc[2, 1])
         print(last_index)
@@ -440,15 +456,15 @@ def downsample_data(patient_id, week, file):
         mr_mvc = find_mvc(mr_rms, loc)
         ml_mvc = find_mvc(ml_rms, loc)
 
-        print("save mvc to db")
-        mr_mvc_db = MVC(
+        print("save MaximumVoluntaryContraction to db")
+        mr_mvc_db = MaximumVoluntaryContraction(
             patient_id=patient_id,
             week=week,
             file=file,
             sensor=emg_right_name,
             mvc=mr_mvc.item(),
         )
-        ml_mvc_db = MVC(
+        ml_mvc_db = MaximumVoluntaryContraction(
             patient_id=patient_id,
             week=week,
             file=file,
@@ -497,7 +513,7 @@ def patch_confirmed_events(patient_id, week, file):
     update = request.json
     print(update)
 
-    prediction_to_update = Prediction.query.filter_by(
+    prediction_to_update = EventPrediction.query.filter_by(
         patient_id=patient_id, week=week, file=file, name=update["name"]
     ).first()
 
@@ -537,7 +553,7 @@ def patch_prediction_sensors(patient_id, week, file):
     if set(sensor) == set([emg_left_name, emg_right_name]):
         sensor = "both"
 
-    prediction_to_update = Prediction.query.filter_by(
+    prediction_to_update = EventPrediction.query.filter_by(
         patient_id=patient_id, week=week, file=file, name=update["name"]
     ).first()
     prediction_to_update.sensor = sensor
@@ -555,7 +571,7 @@ def patch_justification(patient_id, week, file):
     name = update["name"]
     justification = update["justification"]
 
-    justification_to_update = Prediction.query.filter_by(
+    justification_to_update = EventPrediction.query.filter_by(
         patient_id=patient_id, week=week, file=file, name=name
     ).first()
     justification_to_update.justification = justification
@@ -573,7 +589,7 @@ def patch_prediction_event_type(patient_id, week, file):
     print(update)
     event_type = update["event_type"]
 
-    prediction_to_update = Prediction.query.filter_by(
+    prediction_to_update = EventPrediction.query.filter_by(
         patient_id=patient_id, week=week, file=file, name=update["name"]
     ).first()
     prediction_to_update.event_type = event_type
@@ -603,7 +619,7 @@ def get_night_images(patient_id, week, file, version):
         mr = data.get_column(emg_right_name)
         ml = data.get_column(emg_left_name)
 
-        predictions = Prediction.query.filter_by(
+        predictions = EventPrediction.query.filter_by(
             patient_id=patient_id, week=week, file=file
         ).all()
         print(predictions)
@@ -652,7 +668,7 @@ def serve_image(patient_id, week, file, img):
     methods=["GET", "POST"],
 )
 def predict_events(patient_id, week, file):
-    predictions = Prediction.query.filter_by(
+    predictions = EventPrediction.query.filter_by(
         patient_id=patient_id, week=week, file=file
     ).all()
     print(predictions)
@@ -708,7 +724,7 @@ def predict_events(patient_id, week, file):
 
             unique, counts = np.unique(y_pred, return_counts=True)
 
-            print(f"Prediction: {dict(zip(unique, counts))}")
+            print(f"EventPrediction: {dict(zip(unique, counts))}")
 
             result = pd.concat([times, features], axis=1)
             result["y"] = y_pred
@@ -724,7 +740,7 @@ def predict_events(patient_id, week, file):
             predictions_with_features = aggregate_events(predictions)
 
             for key in predictions_with_features:
-                prediction_db = Prediction(
+                prediction_db = EventPrediction(
                     patient_id=patient_id,
                     week=week,
                     file=file,
@@ -889,13 +905,13 @@ def predict_events(patient_id, week, file):
         else:
             print("logic to find new event position")
             events_after = (
-                Prediction.query.filter(
-                    Prediction.patient_id == patient_id,
-                    Prediction.week == week,
-                    Prediction.file == file,
-                    Prediction.start_s >= start_s,
+                EventPrediction.query.filter(
+                    EventPrediction.patient_id == patient_id,
+                    EventPrediction.week == week,
+                    EventPrediction.file == file,
+                    EventPrediction.start_s >= start_s,
                 )
-                .order_by(Prediction.start_s)
+                .order_by(EventPrediction.start_s)
                 .all()
             )
 
@@ -923,13 +939,13 @@ def predict_events(patient_id, week, file):
 
             else:
                 last_event = (
-                    Prediction.query.filter(
-                        Prediction.patient_id == patient_id,
-                        Prediction.week == week,
-                        Prediction.file == file,
-                        Prediction.start_s < start_s,
+                    EventPrediction.query.filter(
+                        EventPrediction.patient_id == patient_id,
+                        EventPrediction.week == week,
+                        EventPrediction.file == file,
+                        EventPrediction.start_s < start_s,
                     )
-                    .order_by(Prediction.start_s.desc())
+                    .order_by(EventPrediction.start_s.desc())
                     .first()
                 )
 

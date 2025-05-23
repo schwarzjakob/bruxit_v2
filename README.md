@@ -46,9 +46,9 @@ the refinement of the model.
 - Migrate database: ``flask db migrate``
 - Upgrade database: ``flask db upgrade``
 - Define location of flask app:
-  - macOS/Linux: ``export FLASK_APP=run.py``
-  - Windows: ``set FLASK_APP=run.py``, ``$env:FLASK_APP = "run.py"``
-- Run the app: ``flask run``
+  - macOS/Linux: ``export FLASK_APP=src.backend.py``
+  - Windows: ``set FLASK_APP=src.backend.py``, ``$env:FLASK_APP = "src.backend.py"``
+- Run the app: ``python3 -m src.backend``
 
 ### Frontend
 - ``npm install -g @vue/cli``
@@ -58,3 +58,36 @@ the refinement of the model.
 - ``npm install localforage``
 - ``npm i pouchdb-utils``
 - ``npm run serve``
+
+## Abbreviations Glossary
+
+| Abbreviation | Meaning                                      | Used In                                           | Notes                                   |
+| ------------ | -------------------------------------------- | ------------------------------------------------- | --------------------------------------- |
+| **MVC**      | Maximum Voluntary Contraction                | `MaximumVoluntaryContraction` model, `mvc` column | Used as calibration baseline            |
+| **HRV**      | Heart Rate Variability                       | `SleepStageSegment`, `EventPrediction`            | Common in physiological signal analysis |
+| **LF**       | Low Frequency component (0.04–0.15 Hz)       | `HRV_lf`, `HRV_lf_hf`                             | Part of HRV spectral features           |
+| **HF**       | High Frequency component (0.15–0.4 Hz)       | `HRV_hf`, `HRV_lf_hf`                             | —                                       |
+| **LF/HF**    | LF to HF ratio                               | `HRV_LFHF`, `HRV_lf_hf`                           | Sympathetic/parasympathetic balance     |
+| **SDNN**     | Standard Deviation of NN intervals           | `HRV_SDNN`, `HRV_sdnn`                            | Time-domain HRV metric                  |
+| **RRI**      | RR Intervals (beat-to-beat timing)           | `RRI`                                             | Core input for HRV metrics              |
+| **MR**       | Masseter Right (EMG channel)                 | `std_mr`, `mav_mr`, etc.                          | Electromyography feature for right side |
+| **ML**       | Masseter Left (EMG channel)                  | `std_ml`, `mav_ml`, etc.                          | —                                       |
+| **STD**      | Standard Deviation                           | `std_mr`, `std_ml`                                | General statistical feature             |
+| **VAR**      | Variance                                     | `var_mr`, `var_ml`                                | —                                       |
+| **RMS**      | Root Mean Square                             | `rms_mr`, `rms_ml`                                | —                                       |
+| **MAV**      | Mean Absolute Value                          | `mav_mr`, `mav_ml`                                | —                                       |
+| **WAMP**     | Willison Amplitude                           | `wamp_mr`, `wamp_ml`                              | Signal complexity measure               |
+| **FR**       | Frequency Ratio                              | `fr_mr`, `fr_ml`                                  | Domain-specific feature                 |
+| **MNP**      | Mean Power                                   | `mnp_mr`, `mnp_ml`                                | Spectral power                          |
+| **TOT**      | Total Power                                  | `tot_mr`, `tot_ml`                                | —                                       |
+| **MNF**      | Mean Frequency                               | `mnf_mr`, `mnf_ml`                                | —                                       |
+| **MDF**      | Median Frequency                             | `mdf_mr`, `mdf_ml`                                | —                                       |
+| **PKF**      | Peak Frequency                               | `pkf_mr`, `pkf_ml`                                | —                                       |
+| **AAC**      | Average Amplitude Change                     | `aac_mr`, `aac_ml`                                | EMG complexity                          |
+| **DASDV**    | Difference Absolute Standard Deviation Value | `dasdv_mr`, `dasdv_ml`                            | Noise-robust signal stat                |
+| **WL**       | Waveform Length                              | `wl_mr`, `wl_ml`                                  | Shape complexity                        |
+| **LOG\_DET** | Log Determinant                              | `log_det_mr`, `log_det_ml`                        | Shape/volume metric                     |
+| **Y\_PROB**  | Predicted probability for class `y=1`        | `y_prob`                                          | Model output                            |
+| **ZC**       | Zero Crossing (commented out)                | `zc_mr`, `zc_ml` (disabled)                       | Possibly noisy                          |
+| **EMG**      | Electromyography                             | `emg_left_name`, `emg_right_name` in `DataConfig` | Muscle signal type                      |
+| **ECG**      | Electrocardiography                          | `ecg_name` in `DataConfig`                        | Heart signal source                     |
