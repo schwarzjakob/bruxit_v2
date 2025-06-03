@@ -24,15 +24,18 @@
 # - Confirm function signatures and naming consistency.
 
 
+import logging
 import neurokit2 as nk
 import pandas as pd
 import polars as pl
 import numpy as np
 import math
-from src.utils.utils import *
+from src.services.settings_service import get_settings
 from src.models.sleep_stage_segment import SleepStageSegment
 from src.extensions import db
 import os
+
+logger = logging.getLogger(__name__)
 
 
 def add_matrix_coordinates(df, x_max=18):
@@ -55,7 +58,7 @@ def compute_HRV_metrics(peaks, sampling_rate):
     hrv_segment_df = pd.DataFrame()
 
     for i in range(len(segment)):
-        # print(i)
+        # logger.info(i)
         hrv_segment = nk.hrv(segment[i], sampling_rate=sampling_rate, show=False)
         hrv_segment_df = pd.concat([hrv_segment_df, hrv_segment], ignore_index=True)
 
@@ -165,7 +168,7 @@ def HRV_analysis(patient_id, week, file, sampling_rate):
     # Add sleep stage detection to DB
     add_sleep_stage_segments_to_db(patient_id, week, file, hrv_with_coords)
 
-    print(hrv_with_coords)
+    logger.info(hrv_with_coords)
 
     return hrv_with_coords.to_json(orient="records")
 
@@ -223,7 +226,7 @@ def return_HRV_analysis(patient_id, week_id, filename, sampling_rate):
     # Add sleep stage detection to DB
     add_sleep_stage_segments_to_db(patient_id, week_id, filename, hrv_with_coords)
 
-    print(hrv_with_coords)
+    logger.info(hrv_with_coords)
 
     return hrv_with_coords.to_json(orient="records")
 

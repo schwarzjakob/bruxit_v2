@@ -1,3 +1,4 @@
+import logging
 import polars as pl
 import pandas as pd
 import neurokit2 as nk
@@ -9,18 +10,17 @@ import datetime
 from src.extensions import db
 from src.models.night_duration import NightDuration
 from src.models.event_prediction import EventPrediction
-from src.models.settings import Settings
 import math
 from sklearn.preprocessing import MinMaxScaler
+from src.services.settings_service import get_settings
 import matplotlib
 
 matplotlib.use("Agg")  # Use the non-GUI backend for Matplotlib
 import matplotlib.pyplot as plt
 import shutil
 
+logger = logging.getLogger(__name__)
 
-def get_settings():
-    return Settings.query.first()
 
 
 def read_loc_csv(p, w, f):
@@ -44,8 +44,8 @@ def rms(emg_signal, sampling=200, window=0.06, min_periods=1):
     )
 
     # Check the output size
-    print(f"Original signal length: {len(emg_signal)}")
-    print(f"RMS signal length: {len(signal_rms)}")
+    logger.info(f"Original signal length: {len(emg_signal)}")
+    logger.info(f"RMS signal length: {len(signal_rms)}")
 
     return signal_rms
 
@@ -184,11 +184,11 @@ def convert_to_sample_indexes(x, y, data_length, sampling_rate):
 
     # End index
     end_id = start_id + samples_per_5_min
-    print(end_id)
+    logger.info(end_id)
 
     if end_id > data_length:
         end_id = data_length
-        print(end_id)
+        logger.info(end_id)
 
     return start_id, end_id
 
@@ -378,7 +378,7 @@ def append_features(continuous_features, row, mean=False):
 def get_continuous_features(features, idx, data_length=None):
     start_time = 60 * 5 * idx
     end_time = start_time + 60 * 5
-    print(start_time, end_time)
+    logger.info(start_time, end_time)
 
     filtered = features.filter(
         ((pl.col("start_time") >= start_time) | (pl.col("end_time") > start_time))
@@ -420,7 +420,7 @@ def get_continuous_features(features, idx, data_length=None):
                         append_features(continuous_features, mean_rows, mean=True)
 
                 if count == len(filtered) - 1:
-                    print("check if smaller than rms mr: ")
+                    logger.info("check if smaller than rms mr: ")
                     len_last_signal_interval = data_length
                     len_continuous_feature_list = len(continuous_features["std_mr"])
                     # If this is the last 5 min intervals is important to make sure that the features length is the same as the data length
@@ -428,8 +428,8 @@ def get_continuous_features(features, idx, data_length=None):
                         missing = len_last_signal_interval - len_continuous_feature_list
                         for _ in range(missing):
                             append_features(continuous_features, row)
-                    print(data_length)
-                    print(len(continuous_features["std_mr"]))
+                    logger.info(data_length)
+                    logger.info(len(continuous_features["std_mr"]))
 
             else:
                 next = filtered.row(count + 1, named=True)
@@ -443,7 +443,7 @@ def get_continuous_features(features, idx, data_length=None):
 
 
 def get_new_event_metrics(patient_id, week, file, start_s, end_s):
-    print("take features from where the event locates")
+    logger.info("take features from where the event locates")
     downsampled_data_path = get_settings().downsampled_data_path
     features = pl.read_csv(
         f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz_features.csv"
@@ -453,7 +453,7 @@ def get_new_event_metrics(patient_id, week, file, start_s, end_s):
         ((pl.col("start_time") >= start_s) | (pl.col("end_time") > start_s))
         & ((pl.col("end_time") <= end_s) | (pl.col("start_time") < end_s))
     )
-    print(features_event.mean()[:, 3:])
+    logger.info(features_event.mean()[:, 3:])
     features_event_mean = features_event.mean()[:, 2:]
 
     return features_event_mean
@@ -650,7 +650,7 @@ def get_rri(ecg, sampling_rate=200):
     time_r_peaks_adjusted = np.insert(
         time_r_peaks, 0, 0
     )  # Add a time point for the fake interval
-    print(time_r_peaks[0])
+    logger.info(time_r_peaks[0])
 
     rri_adj_df = pd.DataFrame(
         data={"RRI": rr_intervals_adjusted, "RRI_t": time_r_peaks_adjusted}
@@ -725,7 +725,7 @@ def extract_features_for_prediction(
     mr_threshold = np.mean(mr_data) + 3 * np.std(mr_data)
     ml_threshold = np.mean(ml_data) + 3 * np.std(ml_data)
 
-    print("seconds: ", len(sensor_data) / minimum_sampling_rate)
+    logger.info("seconds: ", len(sensor_data) / minimum_sampling_rate)
 
     for i in range(window_size_emg, len(sensor_data), overlap_emg):
 

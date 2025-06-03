@@ -1,9 +1,9 @@
+import logging
 from flask import Flask, jsonify
 from src.config import Config
 from src.extensions import db, migrate, cors
-from src.blueprints.routes import (
-    main,
-)  # TODO: Split routes blueprint into respective blueprints
+from src.blueprints.patients import patients
+from src.blueprints.settings import settings_bp
 from src.blueprints.auth import auth
 
 
@@ -16,8 +16,12 @@ def create_app():
     migrate.init_app(app, db)
     cors.init_app(app, resources={r"/*": {"origins": "*"}})
 
+    # configure logging
+    logging.basicConfig(level=logging.INFO)
+
     # register blueprints
-    app.register_blueprint(main, url_prefix="/")
+    app.register_blueprint(patients, url_prefix="/")
+    app.register_blueprint(settings_bp, url_prefix="/")
     app.register_blueprint(auth, url_prefix="/auth")
 
     # health check

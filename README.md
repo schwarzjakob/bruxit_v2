@@ -46,9 +46,9 @@ the refinement of the model.
 - Migrate database: ``flask db migrate``
 - Upgrade database: ``flask db upgrade``
 - Define location of flask app:
-  - macOS/Linux: ``export FLASK_APP=src.backend.py``
-  - Windows: ``set FLASK_APP=src.backend.py``, ``$env:FLASK_APP = "src.backend.py"``
-- Run the app: ``python3 -m src.backend``
+  - macOS/Linux: ``export FLASK_APP=src.app.py``
+  - Windows: ``set FLASK_APP=src.app.py``, ``$env:FLASK_APP = "src.app.py"``
+- Run the app: ``python3 -m src.app``
 
 ### Frontend
 - ``npm install -g @vue/cli``

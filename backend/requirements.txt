@@ -13,4 +13,4 @@ scikit-learn==1.6.1
 openpyxl==3.1.5
 ipykernel==6.29.5
 shap==0.47.2
-xlsxwriter==3.2.3
+xlsxwriter==3.2.3pytest==8.1.1

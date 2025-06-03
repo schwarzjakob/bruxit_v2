@@ -1,20 +1,47 @@
+import logging
 from flask import Blueprint, request, send_from_directory, abort, jsonify, make_response
 from src.extensions import db
 from src.models.event_prediction import EventPrediction
 from src.models.maximum_voluntary_contraction import MaximumVoluntaryContraction
 from src.models.night_duration import NightDuration
 from src.models.sensor_threshold import SensorThreshold
-from src.models.settings import Settings
 from src.models.sleep_stage_segment import SleepStageSegment
+from src.services.settings_service import get_settings
 
-from src.utils.utils import *
-from src.ssd import *
+from src.utils.utils import (
+    read_loc_csv,
+    rectify_signal,
+    rms,
+    fast_rms,
+    find_mvc,
+    parse_data_structure,
+    sort_week_key,
+    sort_data_structure,
+    calculate_night_duration,
+    convert_to_sample_indexes,
+    generate_night_images,
+    append_features,
+    get_continuous_features,
+    get_new_event_metrics,
+    add_new_prediction,
+    calculate_hrv,
+    next_power_of_2,
+    spectrum,
+    frequency_ratio,
+    mean_freq,
+    median_freq,
+    peak_freq,
+    get_rri,
+    extend_df_with_rri,
+    extract_features_for_prediction,
+    aggregate_events,
+)
+from src.ssd import HRV_analysis
 import psycopg2
 from psycopg2.extras import execute_values
 import time
 import io
 from sqlalchemy import create_engine
-import time
 import xgboost as xgb
 import joblib
 import pandas as pd
@@ -23,71 +50,19 @@ from sklearn.preprocessing import MinMaxScaler
 import openpyxl
 
 
-main = Blueprint("main", __name__)
+logger = logging.getLogger(__name__)
+patients = Blueprint("patients", __name__)
 
 
-@main.route("/settings", methods=["GET", "POST"])
-def settings():
-    if request.method == "GET":
-        settings = Settings.query.first()
-
-        if settings:
-            result = {
-                "emgRight": settings.emg_right_name,
-                "emgLeft": settings.emg_left_name,
-                "ecg": settings.ecg_name,
-                "modelFileName": settings.model_file_name,
-                "originalDataPath": settings.original_data_path,
-                "downsampledDataPath": settings.downsampled_data_path,
-                "modelPath": settings.model_path,
-                "originalSamplingRate": settings.original_sampling_rate,
-                "minimumSamplingRate": settings.minimum_sampling_rate,
-            }
-        else:
-            result = {}
-
-        return result, 200
-
-    if request.method == "POST":
-        Settings.query.delete()
-        emg_right_name = request.json["emgRight"]
-        emg_left_name = request.json["emgLeft"]
-        ecg_name = request.json["ecg"]
-        model_file_name = request.json["modelFileName"]
-        original_data_path = request.json["originalDataPath"]
-        downsampled_data_path = request.json["downsampledDataPath"]
-        model_path = request.json["modelPath"]
-        original_sampling_rate = request.json["originalSamplingRate"]
-        minimum_sampling_rate = request.json["minimumSamplingRate"]
-
-        settings = Settings(
-            emg_right_name=emg_right_name,
-            emg_left_name=emg_left_name,
-            ecg_name=ecg_name,
-            model_file_name=model_file_name,
-            original_data_path=original_data_path,
-            downsampled_data_path=downsampled_data_path,
-            model_path=model_path,
-            original_sampling_rate=original_sampling_rate,
-            minimum_sampling_rate=minimum_sampling_rate,
-        )
-
-        db.session.add(settings)
-        db.session.commit()
-
-        return "Settings updated successfully", 200
-
-
-@main.route("/patients-data", methods=["GET"])
+@patients.route("/patients-data", methods=["GET"])
 def get_patient_data():
-    original_data_path = get_settings().original_data_path
-    result = parse_data_structure(original_data_path)
-    sorted_result = sort_data_structure(result)
+    from src.services.patient_service import list_patient_data
 
+    sorted_result = list_patient_data()
     return sorted_result, 200
 
 
-@main.route(
+@patients.route(
     "/ssd/<int:patient_id>/<string:week>/<string:filename>/<int:sampling_rate>",
     methods=["GET"],
 )
@@ -111,12 +86,12 @@ def get_ssd(patient_id, week, filename, sampling_rate):
         start_time = time.time()
         ssd = HRV_analysis(patient_id, week, filename, sampling_rate)
         end_time = time.time()
-        print(f"The loading time for the request is {end_time-start_time} seconds.")
+        logger.info(f"The loading time for the request is {end_time-start_time} seconds.")
 
     return ssd, 200
 
 
-@main.route(
+@patients.route(
     "/patient-threshold/<int:patient_id>/<string:week>/<string:file>",
     methods=["GET", "POST"],
 )
@@ -162,7 +137,7 @@ def patient_threshold(patient_id, week, file):
             patient_id=patient_id, week=week, file=file, sensor=sensor
         ).first()
         if not sensor_threshold_record:
-            print("threshold not in db!")
+            logger.info("threshold not in db!")
             sensor_threshold_record = SensorThreshold(
                 patient_id=patient_id,
                 week=week,
@@ -180,7 +155,7 @@ def patient_threshold(patient_id, week, file):
         return "threshold updated succesffully", 200
 
 
-@main.route("/download-events-csv", methods=["GET"])
+@patients.route("/download-events-csv", methods=["GET"])
 def download_events_csv():
     # Create a pandas DataFrame with your data
     predictions = EventPrediction.query.filter_by(confirmed=True)
@@ -268,7 +243,7 @@ def download_events_csv():
     return response
 
 
-@main.route(
+@patients.route(
     "/get-emg/<int:patient_id>/<string:week>/<string:file>/<float:idx>", methods=["GET"]
 )
 def get_emg(patient_id, week, file, idx):
@@ -284,13 +259,13 @@ def get_emg(patient_id, week, file, idx):
         .first()
         .seconds
     )
-    print(total_seconds)
+    logger.info(total_seconds)
     data_length = int(total_seconds * minimum_sampling_rate)
 
     start_id = int(minimum_sampling_rate * 60 * 5 * idx)
     end_id = start_id + minimum_sampling_rate * 60 * 5
 
-    print("open file")
+    logger.info("open file")
     data = pl.read_csv(
         f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv",
         columns=[emg_right_name, emg_left_name],
@@ -305,19 +280,19 @@ def get_emg(patient_id, week, file, idx):
     ml = pd.Series(data[emg_left_name].to_list())
 
     # Rectify
-    print("rectify the signal")
+    logger.info("rectify the signal")
     mr_rect = rectify_signal(mr)
     ml_rect = rectify_signal(ml)
 
-    print("calculate rms")
+    logger.info("calculate rms")
     mr_rms = rms(mr_rect, sampling=minimum_sampling_rate)
     ml_rms = rms(ml_rect, sampling=minimum_sampling_rate)
 
-    print(mr_rms)
+    logger.info(mr_rms)
 
     num_samples = len(mr_rms)
     if end_id >= data_length:
-        print("last window")
+        logger.info("last window")
     start_time = (
         start_id / minimum_sampling_rate
     )  # Convert start index to seconds (since original is at 2000 Hz)
@@ -332,8 +307,8 @@ def get_emg(patient_id, week, file, idx):
     continuous_features = get_continuous_features(
         features, idx, data_length=len(mr_rms)
     )
-    print("len features: ")
-    print(len(continuous_features["std_mr"]))
+    logger.info("len features: ")
+    logger.info(len(continuous_features["std_mr"]))
     result = {
         emg_right_name: mr_rms.tolist(),
         emg_left_name: ml_rms.tolist(),
@@ -341,19 +316,19 @@ def get_emg(patient_id, week, file, idx):
     }
     end = time.time()
 
-    print(f"{end-start} seconds taken.")
+    logger.info(f"{end-start} seconds taken.")
 
     return result | continuous_features, 200
 
 
-@main.route(
+@patients.route(
     "/night-duration/<int:patient_id>/<string:week>/<string:file>", methods=["GET"]
 )
 def get_night_duration(patient_id, week, file):
     night_duration = NightDuration.query.filter_by(
         patient_id=patient_id, week=week, file=file
     ).first()
-    print(night_duration.seconds)
+    logger.info(night_duration.seconds)
 
     if night_duration is None:
         return "No night duration for this night.", 404
@@ -362,7 +337,7 @@ def get_night_duration(patient_id, week, file):
         return {"duration_s": night_duration.seconds}, 200
 
 
-@main.route(
+@patients.route(
     "/mvc/<int:patient_id>/<string:week>/<string:file>",
     methods=["GET"],
 )
@@ -387,7 +362,7 @@ def get_mvc(patient_id, week, file):
         }, 200
 
 
-@main.route(
+@patients.route(
     "/downsample-data/<int:patient_id>/<string:week>/<string:file>", methods=["GET"]
 )
 def downsample_data(patient_id, week, file):
@@ -407,7 +382,7 @@ def downsample_data(patient_id, week, file):
         return "Data already downsampled", 200
 
     else:
-        print("Open datasets")
+        logger.info("Open datasets")
         data = pl.read_csv(
             f"{original_data_path}/p{patient_id}_wk{week}/{file}",
             columns=[emg_right_name, emg_left_name, ecg_name],
@@ -417,10 +392,10 @@ def downsample_data(patient_id, week, file):
         # Check that there are no null values in the recording
         df_missing = data.filter(pl.any_horizontal(pl.all().is_null()))
 
-        print(df_missing)
+        logger.info(df_missing)
 
         if len(df_missing) > 0:
-            print("fill")
+            logger.info("fill")
             # Fill null values
             data = data.with_columns(pl.all().fill_null(strategy="backward"))
 
@@ -432,31 +407,31 @@ def downsample_data(patient_id, week, file):
             patient_id, week, file, len(mr), sampling_rate=original_sampling_rate
         )
 
-        print("Extract MaximumVoluntaryContraction")
+        logger.info("Extract MaximumVoluntaryContraction")
 
         last_index = int(loc[2, 1])
-        print(last_index)
+        logger.info(last_index)
         mr_short = mr[: last_index + 1]
         ml_short = ml[: last_index + 1]
 
-        print("rectify")
-        print(mr_short)
-        print(type(mr_short))
+        logger.info("rectify")
+        logger.info(mr_short)
+        logger.info(type(mr_short))
         mr_rect = rectify_signal(mr_short)
         ml_rect = rectify_signal(ml_short)
 
         mr_rect = pd.DataFrame(mr_rect)
         ml_rect = pd.DataFrame(ml_rect)
 
-        print("calculate rms")
+        logger.info("calculate rms")
         mr_rms = rms(mr_rect, sampling=original_sampling_rate)
         ml_rms = rms(ml_rect, sampling=original_sampling_rate)
 
-        print("find mvc")
+        logger.info("find mvc")
         mr_mvc = find_mvc(mr_rms, loc)
         ml_mvc = find_mvc(ml_rms, loc)
 
-        print("save MaximumVoluntaryContraction to db")
+        logger.info("save MaximumVoluntaryContraction to db")
         mr_mvc_db = MaximumVoluntaryContraction(
             patient_id=patient_id,
             week=week,
@@ -506,12 +481,12 @@ def downsample_data(patient_id, week, file):
         return "Data downsampled and saved correctly.", 200
 
 
-@main.route(
+@patients.route(
     "/confirmed-events/<int:patient_id>/<string:week>/<string:file>", methods=["PATCH"]
 )
 def patch_confirmed_events(patient_id, week, file):
     update = request.json
-    print(update)
+    logger.info(update)
 
     prediction_to_update = EventPrediction.query.filter_by(
         patient_id=patient_id, week=week, file=file, name=update["name"]
@@ -520,7 +495,7 @@ def patch_confirmed_events(patient_id, week, file):
     if (prediction_to_update.start_s != update["start_s"]) or (
         prediction_to_update.end_s != update["end_s"]
     ):
-        print("update status because of different start or end")
+        logger.info("update status because of different start or end")
         prediction_to_update.status = "modified"
 
     prediction_to_update.start_s = update["start_s"]
@@ -534,7 +509,7 @@ def patch_confirmed_events(patient_id, week, file):
     return "Confirmation of event updated successfully.", 200
 
 
-@main.route(
+@patients.route(
     "/prediction-sensors/<int:patient_id>/<string:week>/<string:file>",
     methods=["PATCH"],
 )
@@ -543,7 +518,7 @@ def patch_prediction_sensors(patient_id, week, file):
     emg_left_name = get_settings().emg_left_name  # 'ML'
 
     update = request.json
-    print(update)
+    logger.info(update)
     sensor = update["sensor"]
 
     if set(sensor) == set([emg_left_name]):
@@ -562,12 +537,12 @@ def patch_prediction_sensors(patient_id, week, file):
     return "Sensor updated successfully.", 200
 
 
-@main.route(
+@patients.route(
     "/justification/<int:patient_id>/<string:week>/<string:file>", methods=["PATCH"]
 )
 def patch_justification(patient_id, week, file):
     update = request.json
-    print(update)
+    logger.info(update)
     name = update["name"]
     justification = update["justification"]
 
@@ -580,13 +555,13 @@ def patch_justification(patient_id, week, file):
     return "Justification updated successfully.", 200
 
 
-@main.route(
+@patients.route(
     "/prediction-event-type/<int:patient_id>/<string:week>/<string:file>",
     methods=["PATCH"],
 )
 def patch_prediction_event_type(patient_id, week, file):
     update = request.json
-    print(update)
+    logger.info(update)
     event_type = update["event_type"]
 
     prediction_to_update = EventPrediction.query.filter_by(
@@ -598,7 +573,7 @@ def patch_prediction_event_type(patient_id, week, file):
     return "Event type updated successfully.", 200
 
 
-@main.route(
+@patients.route(
     "/night-images/<int:patient_id>/<string:week>/<string:file>/<string:version>",
     methods=["GET"],
 )
@@ -622,14 +597,14 @@ def get_night_images(patient_id, week, file, version):
         predictions = EventPrediction.query.filter_by(
             patient_id=patient_id, week=week, file=file
         ).all()
-        print(predictions)
-        print(type(predictions))
+        logger.info(predictions)
+        logger.info(type(predictions))
         generate_night_images(patient_id, week, file, mr, ml, predictions)
 
     # List all images in the directory
     image_files = [f for f in os.listdir(output_dir) if f.endswith(".png")]
 
-    print(image_files)
+    logger.info(image_files)
 
     # Create URLs for the generated images
     images_with_urls = [
@@ -647,7 +622,7 @@ def get_night_images(patient_id, week, file, version):
     return jsonify(images_with_urls), 200
 
 
-@main.route(
+@patients.route(
     "/image/<int:patient_id>/<string:week>/<string:file>/<string:img>", methods=["GET"]
 )
 def serve_image(patient_id, week, file, img):
@@ -656,14 +631,14 @@ def serve_image(patient_id, week, file, img):
     folder_path = (
         downsampled_data_path + f"/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv_images/"
     )
-    print(folder_path + img)
+    logger.info(folder_path + img)
     if os.path.exists(folder_path + img):
         return send_from_directory(folder_path, img)
     else:
         return abort(404)  # File not found
 
 
-@main.route(
+@patients.route(
     "/predict-events/<int:patient_id>/<string:week>/<string:file>",
     methods=["GET", "POST"],
 )
@@ -671,7 +646,7 @@ def predict_events(patient_id, week, file):
     predictions = EventPrediction.query.filter_by(
         patient_id=patient_id, week=week, file=file
     ).all()
-    print(predictions)
+    logger.info(predictions)
 
     if request.method == "GET":
         downsampled_data_path = get_settings().downsampled_data_path
@@ -718,24 +693,24 @@ def predict_events(patient_id, week, file):
                 features
             )  # Probabilities for each class
 
-            print(f"Predicted class labels for new data: {y_pred}")
+            logger.info(f"Predicted class labels for new data: {y_pred}")
 
-            print(f"Predicted probabilities for new data: {y_pred_proba}")
+            logger.info(f"Predicted probabilities for new data: {y_pred_proba}")
 
             unique, counts = np.unique(y_pred, return_counts=True)
 
-            print(f"EventPrediction: {dict(zip(unique, counts))}")
+            logger.info(f"EventPrediction: {dict(zip(unique, counts))}")
 
             result = pd.concat([times, features], axis=1)
             result["y"] = y_pred
             result["y_prob"] = [max(p) for p in y_pred_proba]
 
-            # print(result)
+            # logger.info(result)
 
             predictions = result[result["y"] == 1]
             predictions["confirmed"] = True
 
-            print(predictions)
+            logger.info(predictions)
 
             predictions_with_features = aggregate_events(predictions)
 
@@ -861,7 +836,7 @@ def predict_events(patient_id, week, file):
         emg_left_name = get_settings().emg_left_name  # 'ML'
 
         event_info = request.json
-        print(event_info)
+        logger.info(event_info)
 
         start_s = float(event_info["start_s"])
         end_s = float(event_info["end_s"])
@@ -877,16 +852,16 @@ def predict_events(patient_id, week, file):
             sensor = "both"
 
         justification = event_info["justification"]
-        print(start_s, end_s, justification)
+        logger.info(start_s, end_s, justification)
 
         # Calculate metrics
         metrics = get_new_event_metrics(patient_id, week, file, start_s, end_s)
 
-        print(metrics)
+        logger.info(metrics)
 
         # Get new event name and rename others
         if not predictions:
-            print("Add prediction with name e1")
+            logger.info("Add prediction with name e1")
             name = "e1"
 
             add_new_prediction(
@@ -903,7 +878,7 @@ def predict_events(patient_id, week, file):
             )
 
         else:
-            print("logic to find new event position")
+            logger.info("logic to find new event position")
             events_after = (
                 EventPrediction.query.filter(
                     EventPrediction.patient_id == patient_id,
@@ -915,7 +890,7 @@ def predict_events(patient_id, week, file):
                 .all()
             )
 
-            print(f"Event after: {events_after}")
+            logger.info(f"Event after: {events_after}")
             if events_after:
                 name = events_after[0].name
                 position = int(name[1:])
@@ -949,7 +924,7 @@ def predict_events(patient_id, week, file):
                     .first()
                 )
 
-                print("Last event: ", last_event.name)
+                logger.info("Last event: ", last_event.name)
 
                 last_position = int(last_event.name[1:])
                 name = f"e{last_position + 1}"
@@ -971,7 +946,7 @@ def predict_events(patient_id, week, file):
 
 
 # Feature importance (assuming you have trained with feature names)
-@main.route("/model-feature-importance", methods=["GET"])
+@patients.route("/model-feature-importance", methods=["GET"])
 def get_feature_importance():
     model_file_name = get_settings().model_file_name
     model_path = get_settings().model_path
@@ -987,13 +962,13 @@ def get_feature_importance():
         zip(feature_names, importance.tolist()), key=lambda x: x[1], reverse=True
     )
 
-    print(feature_importance)
-    print(jsonify(feature_importance))
+    logger.info(feature_importance)
+    logger.info(jsonify(feature_importance))
     return jsonify(feature_importance)
 
 
 # Model summary information (e.g., model parameters)
-@main.route("/model-summary", methods=["GET"])
+@patients.route("/model-summary", methods=["GET"])
 def get_model_summary():
     model_file_name = get_settings().model_file_name
     model_path = get_settings().model_path
@@ -1002,6 +977,6 @@ def get_model_summary():
     model.load_model(f"{model_path}/{model_file_name}")
 
     params = model.get_params()  # Gets model parameters
-    print(params)
-    print(jsonify(params))
+    logger.info(params)
+    logger.info(jsonify(params))
     return jsonify(params)
