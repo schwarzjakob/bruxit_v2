@@ -21,6 +21,9 @@ import pandas as pd
 import polars as pl
 from sklearn.preprocessing import MinMaxScaler
 import openpyxl
+from src.utils.logger import Logger
+
+logger = Logger(__name__)
 
 
 main = Blueprint("main", __name__)
@@ -111,7 +114,7 @@ def get_ssd(patient_id, week, filename, sampling_rate):
         start_time = time.time()
         ssd = HRV_analysis(patient_id, week, filename, sampling_rate)
         end_time = time.time()
-        print(f"The loading time for the request is {end_time-start_time} seconds.")
+        logger.info("The loading time for the request is %s seconds.", end_time - start_time)
 
     return ssd, 200
 
@@ -162,7 +165,7 @@ def patient_threshold(patient_id, week, file):
             patient_id=patient_id, week=week, file=file, sensor=sensor
         ).first()
         if not sensor_threshold_record:
-            print("threshold not in db!")
+            logger.debug("threshold not in db!")
             sensor_threshold_record = SensorThreshold(
                 patient_id=patient_id,
                 week=week,
@@ -284,13 +287,13 @@ def get_emg(patient_id, week, file, idx):
         .first()
         .seconds
     )
-    print(total_seconds)
+    logger.debug(total_seconds)
     data_length = int(total_seconds * minimum_sampling_rate)
 
     start_id = int(minimum_sampling_rate * 60 * 5 * idx)
     end_id = start_id + minimum_sampling_rate * 60 * 5
 
-    print("open file")
+    logger.debug("open file")
     data = pl.read_csv(
         f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv",
         columns=[emg_right_name, emg_left_name],
@@ -305,19 +308,19 @@ def get_emg(patient_id, week, file, idx):
     ml = pd.Series(data[emg_left_name].to_list())
 
     # Rectify
-    print("rectify the signal")
+    logger.debug("rectify the signal")
     mr_rect = rectify_signal(mr)
     ml_rect = rectify_signal(ml)
 
-    print("calculate rms")
+    logger.debug("calculate rms")
     mr_rms = rms(mr_rect, sampling=minimum_sampling_rate)
     ml_rms = rms(ml_rect, sampling=minimum_sampling_rate)
 
-    print(mr_rms)
+    logger.debug(mr_rms)
 
     num_samples = len(mr_rms)
     if end_id >= data_length:
-        print("last window")
+        logger.debug("last window")
     start_time = (
         start_id / minimum_sampling_rate
     )  # Convert start index to seconds (since original is at 2000 Hz)
@@ -332,8 +335,8 @@ def get_emg(patient_id, week, file, idx):
     continuous_features = get_continuous_features(
         features, idx, data_length=len(mr_rms)
     )
-    print("len features: ")
-    print(len(continuous_features["std_mr"]))
+    logger.debug("len features: ")
+    logger.debug(len(continuous_features["std_mr"]))
     result = {
         emg_right_name: mr_rms.tolist(),
         emg_left_name: ml_rms.tolist(),
@@ -341,7 +344,7 @@ def get_emg(patient_id, week, file, idx):
     }
     end = time.time()
 
-    print(f"{end-start} seconds taken.")
+    logger.info("%s seconds taken.", end - start)
 
     return result | continuous_features, 200
 
@@ -353,7 +356,7 @@ def get_night_duration(patient_id, week, file):
     night_duration = NightDuration.query.filter_by(
         patient_id=patient_id, week=week, file=file
     ).first()
-    print(night_duration.seconds)
+    logger.debug(night_duration.seconds)
 
     if night_duration is None:
         return "No night duration for this night.", 404
@@ -407,7 +410,7 @@ def downsample_data(patient_id, week, file):
         return "Data already downsampled", 200
 
     else:
-        print("Open datasets")
+        logger.debug("Open datasets")
         data = pl.read_csv(
             f"{original_data_path}/p{patient_id}_wk{week}/{file}",
             columns=[emg_right_name, emg_left_name, ecg_name],
@@ -417,10 +420,10 @@ def downsample_data(patient_id, week, file):
         # Check that there are no null values in the recording
         df_missing = data.filter(pl.any_horizontal(pl.all().is_null()))
 
-        print(df_missing)
+        logger.debug(df_missing)
 
         if len(df_missing) > 0:
-            print("fill")
+            logger.debug("fill")
             # Fill null values
             data = data.with_columns(pl.all().fill_null(strategy="backward"))
 
@@ -432,31 +435,31 @@ def downsample_data(patient_id, week, file):
             patient_id, week, file, len(mr), sampling_rate=original_sampling_rate
         )
 
-        print("Extract MaximumVoluntaryContraction")
+        logger.debug("Extract MaximumVoluntaryContraction")
 
         last_index = int(loc[2, 1])
-        print(last_index)
+        logger.debug(last_index)
         mr_short = mr[: last_index + 1]
         ml_short = ml[: last_index + 1]
 
-        print("rectify")
-        print(mr_short)
-        print(type(mr_short))
+        logger.debug("rectify")
+        logger.debug(mr_short)
+        logger.debug(type(mr_short))
         mr_rect = rectify_signal(mr_short)
         ml_rect = rectify_signal(ml_short)
 
         mr_rect = pd.DataFrame(mr_rect)
         ml_rect = pd.DataFrame(ml_rect)
 
-        print("calculate rms")
+        logger.debug("calculate rms")
         mr_rms = rms(mr_rect, sampling=original_sampling_rate)
         ml_rms = rms(ml_rect, sampling=original_sampling_rate)
 
-        print("find mvc")
+        logger.debug("find mvc")
         mr_mvc = find_mvc(mr_rms, loc)
         ml_mvc = find_mvc(ml_rms, loc)
 
-        print("save MaximumVoluntaryContraction to db")
+        logger.debug("save MaximumVoluntaryContraction to db")
         mr_mvc_db = MaximumVoluntaryContraction(
             patient_id=patient_id,
             week=week,
@@ -511,7 +514,7 @@ def downsample_data(patient_id, week, file):
 )
 def patch_confirmed_events(patient_id, week, file):
     update = request.json
-    print(update)
+    logger.debug(update)
 
     prediction_to_update = EventPrediction.query.filter_by(
         patient_id=patient_id, week=week, file=file, name=update["name"]
@@ -520,7 +523,7 @@ def patch_confirmed_events(patient_id, week, file):
     if (prediction_to_update.start_s != update["start_s"]) or (
         prediction_to_update.end_s != update["end_s"]
     ):
-        print("update status because of different start or end")
+        logger.debug("update status because of different start or end")
         prediction_to_update.status = "modified"
 
     prediction_to_update.start_s = update["start_s"]
@@ -543,7 +546,7 @@ def patch_prediction_sensors(patient_id, week, file):
     emg_left_name = get_settings().emg_left_name  # 'ML'
 
     update = request.json
-    print(update)
+    logger.debug(update)
     sensor = update["sensor"]
 
     if set(sensor) == set([emg_left_name]):
@@ -567,7 +570,7 @@ def patch_prediction_sensors(patient_id, week, file):
 )
 def patch_justification(patient_id, week, file):
     update = request.json
-    print(update)
+    logger.debug(update)
     name = update["name"]
     justification = update["justification"]
 
@@ -586,7 +589,7 @@ def patch_justification(patient_id, week, file):
 )
 def patch_prediction_event_type(patient_id, week, file):
     update = request.json
-    print(update)
+    logger.debug(update)
     event_type = update["event_type"]
 
     prediction_to_update = EventPrediction.query.filter_by(
@@ -622,14 +625,14 @@ def get_night_images(patient_id, week, file, version):
         predictions = EventPrediction.query.filter_by(
             patient_id=patient_id, week=week, file=file
         ).all()
-        print(predictions)
-        print(type(predictions))
+        logger.debug(predictions)
+        logger.debug(type(predictions))
         generate_night_images(patient_id, week, file, mr, ml, predictions)
 
     # List all images in the directory
     image_files = [f for f in os.listdir(output_dir) if f.endswith(".png")]
 
-    print(image_files)
+    logger.debug(image_files)
 
     # Create URLs for the generated images
     images_with_urls = [
@@ -656,7 +659,7 @@ def serve_image(patient_id, week, file, img):
     folder_path = (
         downsampled_data_path + f"/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv_images/"
     )
-    print(folder_path + img)
+    logger.debug(folder_path + img)
     if os.path.exists(folder_path + img):
         return send_from_directory(folder_path, img)
     else:
@@ -671,7 +674,7 @@ def predict_events(patient_id, week, file):
     predictions = EventPrediction.query.filter_by(
         patient_id=patient_id, week=week, file=file
     ).all()
-    print(predictions)
+    logger.debug(predictions)
 
     if request.method == "GET":
         downsampled_data_path = get_settings().downsampled_data_path
@@ -718,13 +721,13 @@ def predict_events(patient_id, week, file):
                 features
             )  # Probabilities for each class
 
-            print(f"Predicted class labels for new data: {y_pred}")
+            logger.info("Predicted class labels for new data: %s", y_pred)
 
-            print(f"Predicted probabilities for new data: {y_pred_proba}")
+            logger.info("Predicted probabilities for new data: %s", y_pred_proba)
 
             unique, counts = np.unique(y_pred, return_counts=True)
 
-            print(f"EventPrediction: {dict(zip(unique, counts))}")
+            logger.debug("EventPrediction: %s", dict(zip(unique, counts)))
 
             result = pd.concat([times, features], axis=1)
             result["y"] = y_pred
@@ -735,7 +738,7 @@ def predict_events(patient_id, week, file):
             predictions = result[result["y"] == 1]
             predictions["confirmed"] = True
 
-            print(predictions)
+            logger.debug(predictions)
 
             predictions_with_features = aggregate_events(predictions)
 
@@ -861,7 +864,7 @@ def predict_events(patient_id, week, file):
         emg_left_name = get_settings().emg_left_name  # 'ML'
 
         event_info = request.json
-        print(event_info)
+        logger.debug(event_info)
 
         start_s = float(event_info["start_s"])
         end_s = float(event_info["end_s"])
@@ -877,16 +880,16 @@ def predict_events(patient_id, week, file):
             sensor = "both"
 
         justification = event_info["justification"]
-        print(start_s, end_s, justification)
+        logger.debug("%s %s %s", start_s, end_s, justification)
 
         # Calculate metrics
         metrics = get_new_event_metrics(patient_id, week, file, start_s, end_s)
 
-        print(metrics)
+        logger.debug(metrics)
 
         # Get new event name and rename others
         if not predictions:
-            print("Add prediction with name e1")
+            logger.debug("Add prediction with name e1")
             name = "e1"
 
             add_new_prediction(
@@ -903,7 +906,7 @@ def predict_events(patient_id, week, file):
             )
 
         else:
-            print("logic to find new event position")
+            logger.debug("logic to find new event position")
             events_after = (
                 EventPrediction.query.filter(
                     EventPrediction.patient_id == patient_id,
@@ -915,7 +918,7 @@ def predict_events(patient_id, week, file):
                 .all()
             )
 
-            print(f"Event after: {events_after}")
+            logger.debug("Event after: %s", events_after)
             if events_after:
                 name = events_after[0].name
                 position = int(name[1:])
@@ -949,7 +952,7 @@ def predict_events(patient_id, week, file):
                     .first()
                 )
 
-                print("Last event: ", last_event.name)
+                logger.debug("Last event: %s", last_event.name)
 
                 last_position = int(last_event.name[1:])
                 name = f"e{last_position + 1}"
@@ -987,8 +990,8 @@ def get_feature_importance():
         zip(feature_names, importance.tolist()), key=lambda x: x[1], reverse=True
     )
 
-    print(feature_importance)
-    print(jsonify(feature_importance))
+    logger.debug(feature_importance)
+    logger.debug(jsonify(feature_importance))
     return jsonify(feature_importance)
 
 
@@ -1002,6 +1005,6 @@ def get_model_summary():
     model.load_model(f"{model_path}/{model_file_name}")
 
     params = model.get_params()  # Gets model parameters
-    print(params)
-    print(jsonify(params))
+    logger.debug(params)
+    logger.debug(jsonify(params))
     return jsonify(params)
