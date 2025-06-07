@@ -74,7 +74,7 @@ export default{
     },
     methods: {
         async getPatientsData(){
-            const path = `http://127.0.0.1:5000/patients-data`
+            const path = `http://127.0.0.1:5000/patients/`;
             const headers = {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'

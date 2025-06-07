@@ -26,44 +26,6 @@ import openpyxl
 main = Blueprint("main", __name__)
 
 
-@main.route("/patients-data", methods=["GET"])
-def get_patient_data():
-    original_data_path = get_settings().original_data_path
-    result = parse_data_structure(original_data_path)
-    sorted_result = sort_data_structure(result)
-
-    return sorted_result, 200
-
-
-@main.route(
-    "/ssd/<int:patient_id>/<string:week>/<string:filename>/<int:sampling_rate>",
-    methods=["GET"],
-)
-def get_ssd(patient_id, week, filename, sampling_rate):
-
-    results = SleepStageSegment.query.filter_by(
-        patient_id=patient_id, week=week, file=filename
-    ).all()
-    if results:
-        ssd = [
-            {
-                "HRV_LFHF": result.HRV_LFHF,
-                "HRV_SDNN": result.HRV_SDNN,
-                "x": result.x,
-                "y": result.y,
-                "stage": result.stage,
-            }
-            for result in results
-        ]
-    else:
-        start_time = time.time()
-        ssd = HRV_analysis(patient_id, week, filename, sampling_rate)
-        end_time = time.time()
-        print(f"The loading time for the request is {end_time-start_time} seconds.")
-
-    return ssd, 200
-
-
 @main.route(
     "/patient-threshold/<int:patient_id>/<string:week>/<string:file>",
     methods=["GET", "POST"],
@@ -648,6 +610,7 @@ def predict_events(patient_id, week, file):
                 features = extract_features_for_prediction(
                     sensor_data, sampling_rate=minimum_sampling_rate
                 )
+                print("Writing features to csv")
 
                 features.to_csv(
                     f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz_features.csv"

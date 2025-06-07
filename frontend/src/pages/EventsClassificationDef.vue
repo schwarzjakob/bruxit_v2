@@ -1889,27 +1889,21 @@
 
 
         },
-        async getSsdData(){
-            const path = `http://127.0.0.1:5000/ssd/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}/200`
-            const headers = {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-            };
+        // TODO: seperate get and post with business logic later
+        async getSsdData() {
+            const base = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}`
+                        + `/weeks/${this.$store.state.weekId}`
+                        + `/nights/${this.$store.state.file}/sleep_stage?sampling_rate=200`;
 
-            await axios.get(path, {headers})
-                .then((res) => {
-                    console.log("ssd data")
-                    console.log(res.data)
-                    this.ssdData = res.data;
-                    console.log("ssdData: ", this.ssdData)
-                    this.totalCells = this.ssdData.length-1;
-                    this.ssdDataReceived = true;
-
-                })
-                .catch(err=>{
-                    console.log(err)
-                })
-    
+            const res = await axios.get(base);
+            if (res.status === 204) {
+                await axios.post(base);
+                const res2 = await axios.get(base);
+                this.ssdData = res2.data;
+            } else {
+                this.ssdData = res.data;
+            }
+            this.ssdDataReceived = true;
         },
         isRem(entry){
             if(entry['stage'] === 'rem'){

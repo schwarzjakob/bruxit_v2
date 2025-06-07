@@ -138,9 +138,9 @@ def find_selected_tiles(value):
         return False
 
 
-def HRV_analysis(patient_id, week, file, sampling_rate):
+def analyze_hrv(patient_id, week, night, sampling_rate):
     downsampled_data_path = get_settings().downsampled_data_path
-    file_path = f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv"
+    file_path = f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv"
     ecg = pl.read_csv(file_path, columns=["ECG"])
 
     ecg_clean = nk.ecg_clean(ecg, sampling_rate=sampling_rate)
@@ -163,7 +163,9 @@ def HRV_analysis(patient_id, week, file, sampling_rate):
     hrv_with_coords["stage"] = hrv_with_coords["HRV_LFHF"].apply(categorize_sleep_stage)
 
     # Add sleep stage detection to DB
-    add_sleep_stage_segments_to_db(patient_id, week, file, hrv_with_coords)
+    add_sleep_stage_segments_to_db(
+        patient_id, week, night, hrv_with_coords
+    )  # TODO: Refactor this into service
 
     print(hrv_with_coords)
 

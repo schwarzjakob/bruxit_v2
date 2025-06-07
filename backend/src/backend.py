@@ -5,6 +5,8 @@ from src.blueprints.routes import (
     main,
 )  # TODO: Split routes blueprint into respective blueprints
 from src.blueprints.settings_blueprint import SettingsBlueprint
+from src.blueprints.patient_blueprint import PatientBlueprint
+
 from src.blueprints.auth import auth
 
 
@@ -18,10 +20,12 @@ def create_app():
     cors.init_app(app, resources={r"/*": {"origins": "*"}})
 
     settings_blueprint = SettingsBlueprint()
+    patient_blueprint = PatientBlueprint()
 
     # register blueprints
     app.register_blueprint(main, url_prefix="/")
     app.register_blueprint(settings_blueprint.blueprint)
+    app.register_blueprint(patient_blueprint.blueprint)
     app.register_blueprint(auth, url_prefix="/auth")
 
     # health check
