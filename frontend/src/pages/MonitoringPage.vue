@@ -107,7 +107,7 @@ export default {
             try {
                 // Make an axios GET request to the Flask backend to get the CSV file
                 const response = await axios({
-                url: 'http://127.0.0.1:5000/download-events-csv', // URL to Flask backend
+                url: 'http://127.0.0.1:5000/events/download', // URL to Flask backend
                 method: 'GET',
                 responseType: 'blob' // Important to handle binary response (CSV)
                 });

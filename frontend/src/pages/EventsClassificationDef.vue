@@ -478,26 +478,23 @@
                 await this.drawSSDHeatMap();
             }
         },
-        async saveJustification(key, value){
-            console.log("patch on db")
-            console.log(key, value)
-            this.eventJustifications[key].saved = true;
+        async saveJustification(key, value) {
+            const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/events/${key}`;
 
-            const path = `http://127.0.0.1:5000/justification/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
-
-            let payload= {'name': key, 'justification': value.justification};
+            let payload = { justification: value.justification };
 
             const headers = {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             };
-            await axios.patch(path, payload, {headers})
+            await axios.patch(path, payload, { headers })
                 .then(() => {
-                    console.log("Justification of prediction updated!")
+                    console.log("Justification of prediction updated!");
+                    this.eventJustifications[key].saved = true;
                 })
-                .catch(err=>{
-                    console.log(err)
-                })
+                .catch(err => {
+                    console.log(err);
+                });
         },
         editJustification(key){
             this.eventJustifications[key].saved = false;
@@ -525,38 +522,42 @@
             });
 
         },
-        async loadImages(version) {
-            this.imgLoading = true
-            const baseUrl = `http://localhost:5000/night-images/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}/${version}`;
-            
-            const headers = {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            };
+        async loadImages() {
+            this.imgLoading = true;
 
-            // Make the request to get the image as a Blob
-            await axios.get(baseUrl, {headers})
-            .then(response => {
-                // Create a URL for the image blob
-                
-                // Assign the blob URL to your image source or handle it as needed
+            const baseUrl = `http://localhost:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/images`;
+
+            try {
+                const response = await axios.get(baseUrl, {
+                    headers: { Accept: 'application/json' }
+                });
+
                 this.images = response.data;
-                const wholeNightSignal = response.data.find(image => image.label === 'Whole Night Signal');
-                console.log("WHOLE NIGHT SIGNAL: ", wholeNightSignal)
+
+                // Select default image
+                const wholeNightSignal = this.images.find(image => image.label === 'Whole Night Signal');
                 if (wholeNightSignal) {
                     this.selectedImageLabel = wholeNightSignal.label;
-                    this.selectedImage = `${wholeNightSignal.src}?t=${new Date().getTime()}`; // Append timestamp
+                    // Use the image route for the actual image load
+                    this.selectedImage = `http://localhost:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/images/${wholeNightSignal.filename}?t=${Date.now()}`;
                 }
-                this.imgLoading = false
 
-                console.log("IMAGES: ", response.data)
-            })
-            .catch(err => {
-                console.log(err);
-            });
+                this.imgLoading = false;
+            } catch (error) {
+                console.error(error);
+            }
+        },
+        updateImage(value) {
+            const selectedImageData = this.images.find(image => image.label === value);
+            if (selectedImageData && selectedImageData.filename) {
+                const newUrl = `http://localhost:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/images/${selectedImageData.filename}?t=${Date.now()}`;
+                if (this.selectedImage !== newUrl) {
+                this.selectedImage = newUrl;
+                }
+            }
         },
         async getThresholds(){
-            const path = `http://127.0.0.1:5000/patient-threshold/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`
+            const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/thresholds`;
             const headers = {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
@@ -572,14 +573,6 @@
                     console.log(err)
                 })
         }, 
-        updateImage(value) {
-            const selectedImageData = this.images.find(image => image.label === value);
-            const timestamp = new Date().getTime();
-
-            if (selectedImageData) {
-                this.selectedImage = `${selectedImageData.src}?t=${timestamp}`; // Append timestamp to the src
-            }
-        },
         getFillColor(confirmed) {
             // Green for Confirm, Red for Discard
             return confirmed ? '#13ce66' : '#ff4949';
@@ -625,30 +618,26 @@
                 });
             }
         },
-        async updateEventType(key, value){
-            const path = `http://127.0.0.1:5000/prediction-event-type/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
-
-            let payload= {};
-            if (value ==''){
-                this.eventTypes[key] = "";
-            }
-            payload['name'] = key;
-            payload['event_type'] = value;
-
-            console.log("PAYLOAD: ", payload)
+        async patchEvent(eventName, patchData) {
+            const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/events/${eventName}`;
             const headers = {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             };
-            await axios.patch(path, payload, {headers})
-                .then(() => {
-                    console.log("Event type of prediction updated!")
+            try {
+                await axios.patch(path, patchData, { headers });
+                console.log(`Event ${eventName} updated on server`, patchData);
+            } catch (err) {
+                console.error(`Failed to patch ${eventName}:`, err);
+            }
+        },
+        async updateEventType(eventName, newType) {
+            console.log("Updating event type for", eventName, "→", newType);
 
-                })
-                .catch(err=>{
-                    console.log(err)
-                })
+            // send only the changed field
+            await this.patchEvent(eventName, { event_type: newType });
 
+            console.log(`Event type of ${eventName} updated!`);
         },
         getEventStatus(eventStatus){
             let color = "black";
@@ -665,35 +654,23 @@
             return  {'text': "", 'color': color}
 
         },
-        async handleSensorsCheckBoxChange(key, value, valueEvent){
-            console.log("Change sensors on DB")
-            console.log(key, value)
-            if(value.length === 0){
-                console.log("length: 0")
-                this.sensorsCheckBox[key] = ['MR', 'ML']
+        async handleSensorsCheckBoxChange(eventName, newSensors, valueEvent) {
+            console.log("Change sensors on DB", eventName, newSensors);
+
+            let sensorToSend;
+
+            if (newSensors.length === 2) {
+                sensorToSend = "both";
+            } else if (newSensors.length === 1) {
+                sensorToSend = newSensors[0];
+            } else {
+                // if none selected, fallback to both or handle error
+                sensorToSend = "both";
             }
 
-            const path = `http://127.0.0.1:5000/prediction-sensors/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
+            await this.patchEvent(eventName, { sensor: sensorToSend });
 
-            let payload= {};
-            payload['name'] = key;
-            payload['sensor'] = value;
-
-            console.log("PAYLOAD: ", payload)
-            const headers = {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            };
-            await axios.patch(path, payload, {headers})
-                .then(() => {
-                    console.log("Sensors of prediction updated!")
-                    this.updateMarkArea(key, valueEvent)
-
-                })
-                .catch(err=>{
-                    console.log(err)
-                })
-
+            this.updateMarkArea(eventName, valueEvent);
         },
         async reloadData(){
             await this.getPredictions();
@@ -710,7 +687,7 @@
         async addNewEvent(form){
             console.log("Add event: ", form.start, form.end)
             console.log(this.current5minEvents)
-            const path = `http://127.0.0.1:5000/predict-events/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
+            const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/events`;
             let payload= {};
             payload['start_s'] = form.start;
             payload['end_s'] = form.end;
@@ -750,31 +727,21 @@
             this.eventForm.start = this.startSelection;
             this.eventForm.end = this.endSelection;
         },
-        async updateConfirmedEvents(keyEvent, boolConfirmed, value){
-            this.confirmedEvents[keyEvent] = boolConfirmed;
-            const path = `http://127.0.0.1:5000/confirmed-events/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
-            let payload= {};
-            payload['name'] = keyEvent;
-            payload['confirmed'] = boolConfirmed;
-            payload['start_s'] = value.start_s;
-            payload['end_s'] = value.end_s;
-            console.log("PAYLOAD: ", payload)
+        async updateConfirmedEvents(keyEvent, boolConfirmed) {
+            const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/events/${keyEvent}`;
+            let payload = { confirmed: boolConfirmed };
+
             const headers = {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             };
-            await axios.patch(path, payload, {headers})
+            await axios.patch(path, payload, { headers })
                 .then(() => {
-                    console.log("Confirmed events updated!")
-                    this.updateMarkArea(keyEvent, value)
-                    this.predictions[keyEvent].confirmed = boolConfirmed;
-                    this.drawECHeatMap()
-
+                    console.log("Confirmed events updated!");
                 })
-                .catch(err=>{
-                    console.log(err)
-                })
-
+                .catch(err => {
+                    console.log(err);
+                });
         },
         updateMarkArea(key, value){
             console.log(value.start_s, value.end_s);
@@ -790,12 +757,13 @@
                 }
                 if(this.confirmedEvents[key] == true){
                     console.log("update confirm")
-                    const path = `http://127.0.0.1:5000/confirmed-events/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
-                    let payload= {};
-                    payload['name'] = key;
-                    payload['start_s'] = value.start_s;
-                    payload['end_s'] = value.end_s;
-                    payload['confirmed'] = this.confirmedEvents[key];
+                    const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/events/${key}`;
+                    let payload = {
+                        confirmed: this.confirmedEvents[key],
+                        start_s: value.start_s,
+                        end_s: value.end_s,
+                        // optionally other fields if you want to patch more
+                    };
                     console.log("PAYLOAD: ", payload)
                     const headers = {
                         'Accept': 'application/json',
@@ -990,14 +958,14 @@
             }
             await this.getData(this.tileIndex);
         },
-        async getData(idx) {
+        async getData(five_minute_window_index) {
             this.emgReceived = false;
             this.amountEvents = 0;
 
-            const mvcPath = `http://127.0.0.1:5000/mvc/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
-            const ndPath = `http://127.0.0.1:5000/night-duration/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
+            const mvcPath = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/maximum_voluntary_contraction`;
+            const ndPath = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/duration`;
 
-            const emgPath = `http://127.0.0.1:5000/get-emg/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}/${idx}`;
+            const emgPath = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/emg_windows/${five_minute_window_index}`;
             const headers = {
                 Accept: 'application/json',
                 'Content-Type': 'application/json',
@@ -1136,7 +1104,7 @@
         },
         async getPredictions(){
             this.loading = true;
-            const path = `http://127.0.0.1:5000/predict-events/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`
+            const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/events`
             const headers = {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
@@ -1585,7 +1553,7 @@
             console.log("thresholdMr: ", thresholdMr)
             console.log(typeof thresholdMr)
             
-            const path = `http://127.0.0.1:5000/patient-threshold/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
+            const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/thresholds`;
             let payload= {};
             payload['sensor'] = "MR";
             payload['threshold'] = thresholdMr;
@@ -1634,7 +1602,7 @@
                 })
         },
         async updateThresholdMl(thresholdMl){
-            const path = `http://127.0.0.1:5000/patient-threshold/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
+            const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/thresholds`;
             let payload= {};
             payload['sensor'] = "ML";
             payload['threshold'] = thresholdMl;
@@ -1889,27 +1857,21 @@
 
 
         },
-        async getSsdData(){
-            const path = `http://127.0.0.1:5000/ssd/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}/200`
-            const headers = {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-            };
+        // TODO: seperate get and post with business logic later
+        async getSsdData() {
+            const base = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}`
+                        + `/weeks/${this.$store.state.weekId}`
+                        + `/nights/${this.$store.state.file}/sleep_stage?sampling_rate=200`;
 
-            await axios.get(path, {headers})
-                .then((res) => {
-                    console.log("ssd data")
-                    console.log(res.data)
-                    this.ssdData = res.data;
-                    console.log("ssdData: ", this.ssdData)
-                    this.totalCells = this.ssdData.length-1;
-                    this.ssdDataReceived = true;
-
-                })
-                .catch(err=>{
-                    console.log(err)
-                })
-    
+            const res = await axios.get(base);
+            if (res.status === 204) {
+                await axios.post(base);
+                const res2 = await axios.get(base);
+                this.ssdData = res2.data;
+            } else {
+                this.ssdData = res.data;
+            }
+            this.ssdDataReceived = true;
         },
         isRem(entry){
             if(entry['stage'] === 'rem'){
