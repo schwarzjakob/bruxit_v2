@@ -1,13 +1,11 @@
 from flask import Flask, jsonify
 from src.config import Config
 from src.extensions import db, migrate, cors
-from src.blueprints.routes import (
-    main,
-)  # TODO: Split routes blueprint into respective blueprints
+
 from src.blueprints.settings_blueprint import SettingsBlueprint
 from src.blueprints.patient_blueprint import PatientBlueprint
 from src.blueprints.event_blueprint import EventBlueprint
-
+from src.blueprints.model_blueprint import ModelBlueprint
 from src.blueprints.auth import auth
 
 
@@ -23,12 +21,13 @@ def create_app():
     settings_blueprint = SettingsBlueprint()
     patient_blueprint = PatientBlueprint()
     event_blueprint = EventBlueprint()
+    model_blueprint = ModelBlueprint()
 
     # register blueprints
-    app.register_blueprint(main, url_prefix="/")
     app.register_blueprint(settings_blueprint.blueprint)
     app.register_blueprint(patient_blueprint.blueprint)
     app.register_blueprint(event_blueprint.blueprint)
+    app.register_blueprint(model_blueprint.blueprint)
     app.register_blueprint(auth, url_prefix="/auth")
 
     # health check
