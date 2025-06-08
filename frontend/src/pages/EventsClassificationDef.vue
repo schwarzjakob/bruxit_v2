@@ -702,7 +702,7 @@
         async addNewEvent(form){
             console.log("Add event: ", form.start, form.end)
             console.log(this.current5minEvents)
-            const path = `http://127.0.0.1:5000/predict-events/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
+            const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/events`;
             let payload= {};
             payload['start_s'] = form.start;
             payload['end_s'] = form.end;
@@ -1119,7 +1119,7 @@
         },
         async getPredictions(){
             this.loading = true;
-            const path = `http://127.0.0.1:5000/predict-events/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`
+            const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/events`
             const headers = {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'

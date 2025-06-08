@@ -10,8 +10,6 @@ import pandas as pd
 import polars as pl
 import neurokit2 as nk
 import xgboost as xgb
-from flask import current_app, make_response, jsonify
-from sqlalchemy import func
 
 from src.extensions import db
 from src.models.event_prediction import EventPrediction
@@ -20,6 +18,7 @@ from src.models.night_duration import NightDuration
 from src.models.sensor_threshold import SensorThreshold
 from src.models.sleep_stage_segment import SleepStageSegment
 from src.utils.utils import (
+    add_new_prediction,
     get_settings,
     aggregate_events,
     calculate_night_duration,
@@ -468,20 +467,312 @@ class PatientService:
     #   4 · Events
     # ------------------------------------------------------------------ #
 
-    def list_events(self, patient_id: int, week: str, night: str) -> Dict[str, Any]:
-        recs = EventPrediction.query.filter_by(
+    def get_events(
+        self, patient_id: int, week: str, night: str
+    ) -> List[Dict[str, Any]]:
+        events = EventPrediction.query.filter_by(
             patient_id=patient_id, week=week, file=night
         ).all()
-        return {r.name: self.__to_event_dict(r) for r in recs}
+
+        downsampled_data_path = get_settings().downsampled_data_path
+        model_path = get_settings().model_path
+
+        minimum_sampling_rate = get_settings().minimum_sampling_rate  # 200
+
+        model_file_name = get_settings().model_file_name
+
+        if not events:
+
+            if os.path.isfile(
+                f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz_features.csv"
+            ):
+                features = pd.read_csv(
+                    f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz_features.csv"
+                )
+
+                times = features.iloc[:, 1:3]
+                features = features.iloc[:, 3:43]
+
+            else:
+                sensor_data = pd.read_csv(
+                    f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv"
+                )
+                features = extract_features_for_prediction(
+                    sensor_data, sampling_rate=minimum_sampling_rate
+                )
+                self.__logger.info("Writing features to csv")
+
+                features.to_csv(
+                    f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz_features.csv"
+                )
+
+                times = features.iloc[:, 0:2]
+                features = features.iloc[:, 2:42]
+
+            # Load model
+            loaded_model = xgb.XGBClassifier()
+            loaded_model.load_model(f"{model_path}/{model_file_name}")
+
+            y_pred = loaded_model.predict(features)
+
+            y_pred_proba = loaded_model.predict_proba(
+                features
+            )  # Probabilities for each class
+
+            self.__logger.info(f"Predicted class labels for new data: {y_pred}")
+
+            self.__logger.info(f"Predicted probabilities for new data: {y_pred_proba}")
+
+            unique, counts = np.unique(y_pred, return_counts=True)
+
+            self.__logger.info(f"EventPrediction: {dict(zip(unique, counts))}")
+
+            result = pd.concat([times, features], axis=1)
+            result["y"] = y_pred
+            result["y_prob"] = [max(p) for p in y_pred_proba]
+
+            # self.__logger.info(result)
+
+            events = result[result["y"] == 1]
+            events["confirmed"] = True
+
+            self.__logger.info(events)
+
+            events_with_features = aggregate_events(events)
+
+            for key in events_with_features:
+                event_db = EventPrediction(
+                    patient_id=patient_id,
+                    week=week,
+                    file=night,
+                    name=key,
+                    start_s=events_with_features[key]["start_s"],
+                    end_s=events_with_features[key]["end_s"],
+                    std_mr=events_with_features[key]["std_mr"].item(),
+                    std_ml=events_with_features[key]["std_ml"].item(),
+                    var_mr=events_with_features[key]["var_mr"].item(),
+                    var_ml=events_with_features[key]["var_ml"].item(),
+                    rms_mr=events_with_features[key]["rms_mr"].item(),
+                    rms_ml=events_with_features[key]["rms_ml"].item(),
+                    mav_mr=events_with_features[key]["mav_mr"].item(),
+                    mav_ml=events_with_features[key]["mav_ml"].item(),
+                    log_det_mr=events_with_features[key]["log_det_mr"].item(),
+                    log_det_ml=events_with_features[key]["log_det_ml"].item(),
+                    wl_mr=events_with_features[key]["wl_mr"].item(),
+                    wl_ml=events_with_features[key]["wl_ml"].item(),
+                    aac_mr=events_with_features[key]["aac_mr"].item(),
+                    aac_ml=events_with_features[key]["aac_ml"].item(),
+                    dasdv_mr=events_with_features[key]["dasdv_mr"].item(),
+                    dasdv_ml=events_with_features[key]["dasdv_ml"].item(),
+                    wamp_mr=events_with_features[key]["wamp_mr"].item(),
+                    wamp_ml=events_with_features[key]["wamp_ml"].item(),
+                    fr_mr=events_with_features[key]["fr_mr"].item(),
+                    fr_ml=events_with_features[key]["fr_ml"].item(),
+                    mnp_mr=events_with_features[key]["mnp_mr"].item(),
+                    mnp_ml=events_with_features[key]["mnp_ml"].item(),
+                    tot_mr=events_with_features[key]["tot_mr"].item(),
+                    tot_ml=events_with_features[key]["tot_ml"].item(),
+                    mnf_mr=events_with_features[key]["mnf_mr"].item(),
+                    mnf_ml=events_with_features[key]["mnf_ml"].item(),
+                    mdf_mr=events_with_features[key]["mdf_mr"].item(),
+                    mdf_ml=events_with_features[key]["mdf_ml"].item(),
+                    pkf_mr=events_with_features[key]["pkf_mr"].item(),
+                    pkf_ml=events_with_features[key]["pkf_ml"].item(),
+                    HRV_mean=events_with_features[key]["HRV_mean"].item(),
+                    HRV_median=events_with_features[key]["HRV_median"].item(),
+                    HRV_sdnn=events_with_features[key]["HRV_sdnn"].item(),
+                    HRV_min=events_with_features[key]["HRV_min"].item(),
+                    HRV_max=events_with_features[key]["HRV_max"].item(),
+                    HRV_vhf=events_with_features[key]["HRV_vhf"].item(),
+                    HRV_lf=events_with_features[key]["HRV_lf"].item(),
+                    HRV_hf=events_with_features[key]["HRV_hf"].item(),
+                    HRV_lf_hf=events_with_features[key]["HRV_lf_hf"].item(),
+                    RRI=events_with_features[key]["RRI"].item(),
+                    y_prob=events_with_features[key]["y_prob"].item(),
+                    confirmed=True,
+                    sensor="both",
+                    event_type="",
+                    status="model",
+                    justification="",
+                )
+
+                db.session.add(event_db)
+
+            db.session.commit()
+
+            return events_with_features
+        else:
+            result = {}
+            for event in events:
+                result[event.name] = {
+                    "start_s": event.start_s,
+                    "end_s": event.end_s,
+                    "std_mr": event.std_mr,
+                    "std_ml": event.std_ml,
+                    "var_mr": event.var_mr,
+                    "var_ml": event.var_ml,
+                    "rms_mr": event.rms_mr,
+                    "rms_ml": event.rms_ml,
+                    "mav_mr": event.mav_mr,
+                    "mav_ml": event.mav_ml,
+                    "log_det_mr": event.log_det_mr,
+                    "log_det_ml": event.log_det_ml,
+                    "wl_mr": event.wl_mr,
+                    "wl_ml": event.wl_ml,
+                    "aac_mr": event.aac_mr,
+                    "aac_ml": event.aac_ml,
+                    "dasdv_mr": event.dasdv_mr,
+                    "dasdv_ml": event.dasdv_ml,
+                    "wamp_mr": event.wamp_mr,
+                    "wamp_ml": event.wamp_ml,
+                    "fr_mr": event.fr_mr,
+                    "fr_ml": event.fr_ml,
+                    "mnp_mr": event.mnp_mr,
+                    "mnp_ml": event.mnp_ml,
+                    "tot_mr": event.tot_mr,
+                    "tot_ml": event.tot_ml,
+                    "mnf_mr": event.mnf_mr,
+                    "mnf_ml": event.mnf_ml,
+                    "mdf_mr": event.mdf_mr,
+                    "mdf_ml": event.mdf_ml,
+                    "pkf_mr": event.pkf_mr,
+                    "pkf_ml": event.pkf_ml,
+                    "HRV_mean": event.HRV_mean,
+                    "HRV_median": event.HRV_median,
+                    "HRV_sdnn": event.HRV_sdnn,
+                    "HRV_min": event.HRV_min,
+                    "HRV_max": event.HRV_max,
+                    "HRV_vhf": event.HRV_vhf,
+                    "HRV_lf": event.HRV_lf,
+                    "HRV_hf": event.HRV_hf,
+                    "HRV_lf_hf": event.HRV_lf_hf,
+                    "RRI": event.RRI,
+                    "y_prob": event.y_prob,
+                    "confirmed": event.confirmed,
+                    "sensor": event.sensor,
+                    "event_type": event.event_type,
+                    "status": event.status,
+                    "justification": event.justification,
+                }
+
+            return result
 
     def create_event(
-        self, patient_id: int, week: str, night: str, payload: Dict[str, Any]
-    ) -> Dict[str, str]:
-        # Direct port of old POST logic (shortened)
-        from src.routes import predict_events  # type: ignore
+        self, patient_id: int, week: str, night: str, event_details: Dict[str, Any]
+    ):
+        events = EventPrediction.query.filter_by(
+            patient_id=patient_id, week=week, file=night
+        ).all()
+        emg_right_name = get_settings().emg_right_name  # 'MR'
+        emg_left_name = get_settings().emg_left_name  # 'ML'
 
-        predict_events(patient_id, week, night)  # executes old logic
-        return {"message": "Event queued / inserted."}
+        print(event_details)
+
+        start_s = float(event_details["start_s"])
+        end_s = float(event_details["end_s"])
+        event_type = event_details["event_type"]
+
+        sensor = event_details["sensor"]
+
+        if set(sensor) == set([emg_left_name]):
+            sensor = emg_left_name
+        if set(sensor) == set([emg_right_name]):
+            sensor = emg_right_name
+        if set(sensor) == set([emg_left_name, emg_right_name]):
+            sensor = "both"
+
+        justification = event_details["justification"]
+        print(start_s, end_s, justification)
+
+        # Calculate metrics
+        metrics = get_new_event_metrics(patient_id, week, night, start_s, end_s)
+
+        print(metrics)
+
+        # Get new event name and rename others
+        if not events:
+            print("Add prediction with name e1")
+            name = "e1"
+
+            add_new_prediction(
+                patient_id,
+                week,
+                night,
+                start_s,
+                end_s,
+                event_type,
+                sensor,
+                justification,
+                name,
+                metrics,
+            )
+
+        else:
+            print("logic to find new event position")
+            events_after = (
+                EventPrediction.query.filter(
+                    EventPrediction.patient_id == patient_id,
+                    EventPrediction.week == week,
+                    EventPrediction.file == night,
+                    EventPrediction.start_s >= start_s,
+                )
+                .order_by(EventPrediction.start_s)
+                .all()
+            )
+
+            print(f"Event after: {events_after}")
+            if events_after:
+                name = events_after[0].name
+                position = int(name[1:])
+
+                for event in events_after:
+                    position += 1
+                    event.name = f"e{position}"
+                db.session.commit()
+                add_new_prediction(
+                    patient_id,
+                    week,
+                    night,
+                    start_s,
+                    end_s,
+                    event_type,
+                    sensor,
+                    justification,
+                    name,
+                    metrics,
+                )
+
+            else:
+                last_event = (
+                    EventPrediction.query.filter(
+                        EventPrediction.patient_id == patient_id,
+                        EventPrediction.week == week,
+                        EventPrediction.file == night,
+                        EventPrediction.start_s < start_s,
+                    )
+                    .order_by(EventPrediction.start_s.desc())
+                    .first()
+                )
+
+                print("Last event: ", last_event.name)
+
+                last_position = int(last_event.name[1:])
+                name = f"e{last_position + 1}"
+
+                add_new_prediction(
+                    patient_id,
+                    week,
+                    night,
+                    start_s,
+                    end_s,
+                    event_type,
+                    sensor,
+                    justification,
+                    name,
+                    metrics,
+                )
+
+        return "Post event added by expert."
 
     def patch_event(
         self,
@@ -533,7 +824,7 @@ class PatientService:
         out.seek(0)
 
         # Save to tmp dir so send_from_directory can stream it.
-        tmp = f"/tmp/confirmed_events.xlsx"
+        tmp = "/tmp/confirmed_events.xlsx"
         with open(tmp, "wb") as fh:
             fh.write(out.read())
         return "/tmp", "confirmed_events.xlsx"

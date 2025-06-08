@@ -139,6 +139,16 @@ class PatientBlueprint:
 
         # --- 3.4 events ------------------------------------------------
         self.blueprint.add_url_rule(
+            "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/events",
+            view_func=self.__get_events,
+            methods=["GET"],
+        )
+        self.blueprint.add_url_rule(
+            "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/events",
+            view_func=self.__post_event,
+            methods=["POST"],
+        )
+        self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/events/<string:event_name>",
             view_func=self.__patch_event,
             methods=["PATCH"],
@@ -262,15 +272,15 @@ class PatientBlueprint:
         return send_from_directory(directory, filename)
 
     # 4 · Events
-    def __events(self, patient_id: int, week: str, night: str):
-        if request.method == "GET":
-            return (
-                jsonify(self.__patient_service.list_events(patient_id, week, night)),
-                200,
-            )
-        body = request.get_json()
+    def __get_events(self, patient_id: int, week: str, night: str):
+        if not self.__patient_service.get_events(patient_id, week, night):
+            return {}, 204
+        return self.__patient_service.get_events(patient_id, week, night), 200
+
+    def __post_event(self, patient_id: int, week: str, night: str):
+        event_details = request.get_json()
         return (
-            jsonify(self.__patient_service.create_event(patient_id, week, night, body)),
+            self.__patient_service.create_event(patient_id, week, night, event_details),
             201,
         )
 
