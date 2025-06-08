@@ -618,30 +618,26 @@
                 });
             }
         },
-        async updateEventType(key, value){
-            const path = `http://127.0.0.1:5000/prediction-event-type/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
-
-            let payload= {};
-            if (value ==''){
-                this.eventTypes[key] = "";
-            }
-            payload['name'] = key;
-            payload['event_type'] = value;
-
-            console.log("PAYLOAD: ", payload)
+        async patchEvent(eventName, patchData) {
+            const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/events/${eventName}`;
             const headers = {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             };
-            await axios.patch(path, payload, {headers})
-                .then(() => {
-                    console.log("Event type of prediction updated!")
+            try {
+                await axios.patch(path, patchData, { headers });
+                console.log(`Event ${eventName} updated on server`, patchData);
+            } catch (err) {
+                console.error(`Failed to patch ${eventName}:`, err);
+            }
+        },
+        async updateEventType(eventName, newType) {
+            console.log("Updating event type for", eventName, "→", newType);
 
-                })
-                .catch(err=>{
-                    console.log(err)
-                })
+            // send only the changed field
+            await this.patchEvent(eventName, { event_type: newType });
 
+            console.log(`Event type of ${eventName} updated!`);
         },
         getEventStatus(eventStatus){
             let color = "black";
@@ -658,35 +654,23 @@
             return  {'text': "", 'color': color}
 
         },
-        async handleSensorsCheckBoxChange(key, value, valueEvent){
-            console.log("Change sensors on DB")
-            console.log(key, value)
-            if(value.length === 0){
-                console.log("length: 0")
-                this.sensorsCheckBox[key] = ['MR', 'ML']
+        async handleSensorsCheckBoxChange(eventName, newSensors, valueEvent) {
+            console.log("Change sensors on DB", eventName, newSensors);
+
+            let sensorToSend;
+
+            if (newSensors.length === 2) {
+                sensorToSend = "both";
+            } else if (newSensors.length === 1) {
+                sensorToSend = newSensors[0];
+            } else {
+                // if none selected, fallback to both or handle error
+                sensorToSend = "both";
             }
 
-            const path = `http://127.0.0.1:5000/prediction-sensors/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
+            await this.patchEvent(eventName, { sensor: sensorToSend });
 
-            let payload= {};
-            payload['name'] = key;
-            payload['sensor'] = value;
-
-            console.log("PAYLOAD: ", payload)
-            const headers = {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            };
-            await axios.patch(path, payload, {headers})
-                .then(() => {
-                    console.log("Sensors of prediction updated!")
-                    this.updateMarkArea(key, valueEvent)
-
-                })
-                .catch(err=>{
-                    console.log(err)
-                })
-
+            this.updateMarkArea(eventName, valueEvent);
         },
         async reloadData(){
             await this.getPredictions();
@@ -773,7 +757,7 @@
                 }
                 if(this.confirmedEvents[key] == true){
                     console.log("update confirm")
-                    const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/events/${keyEvent}`;
+                    const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/events/${key}`;
                     let payload = {
                         confirmed: this.confirmedEvents[key],
                         start_s: value.start_s,

@@ -25,52 +25,6 @@ import openpyxl
 main = Blueprint("main", __name__)
 
 
-@main.route(
-    "/prediction-sensors/<int:patient_id>/<string:week>/<string:file>",
-    methods=["PATCH"],
-)
-def patch_prediction_sensors(patient_id, week, file):
-    emg_right_name = get_settings().emg_right_name  # 'MR'
-    emg_left_name = get_settings().emg_left_name  # 'ML'
-
-    update = request.json
-    print(update)
-    sensor = update["sensor"]
-
-    if set(sensor) == set([emg_left_name]):
-        sensor = emg_left_name
-    if set(sensor) == set([emg_right_name]):
-        sensor = emg_right_name
-    if set(sensor) == set([emg_left_name, emg_right_name]):
-        sensor = "both"
-
-    prediction_to_update = EventPrediction.query.filter_by(
-        patient_id=patient_id, week=week, file=file, name=update["name"]
-    ).first()
-    prediction_to_update.sensor = sensor
-    db.session.commit()
-
-    return "Sensor updated successfully.", 200
-
-
-@main.route(
-    "/prediction-event-type/<int:patient_id>/<string:week>/<string:file>",
-    methods=["PATCH"],
-)
-def patch_prediction_event_type(patient_id, week, file):
-    update = request.json
-    print(update)
-    event_type = update["event_type"]
-
-    prediction_to_update = EventPrediction.query.filter_by(
-        patient_id=patient_id, week=week, file=file, name=update["name"]
-    ).first()
-    prediction_to_update.event_type = event_type
-    db.session.commit()
-
-    return "Event type updated successfully.", 200
-
-
 # Feature importance (assuming you have trained with feature names)
 @main.route("/model-feature-importance", methods=["GET"])
 def get_feature_importance():
