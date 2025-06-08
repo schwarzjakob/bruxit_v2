@@ -25,13 +25,11 @@ class PatientBlueprint:
                                 /{sensor}
                             /images
                                 /{imageName}
-                            /events           [GET, POST]
-                                /{eventId}     [PATCH]
                             /downsample       [POST]
     """
 
     def __init__(self) -> None:
-        self.__log = logging.getLogger(__name__)
+        self.__logger = logging.getLogger(__name__)
         self.blueprint = Blueprint(
             "patient_blueprint", "patient_blueprint", url_prefix="/patients"
         )
@@ -42,20 +40,19 @@ class PatientBlueprint:
     #   Route registration
     # ------------------------------------------------------------------ #
 
-    def __setup_routes(self) -> None:  # noqa: C901
-        bp = self.blueprint
+    def __setup_routes(self) -> None:
 
         # --- 1 · Top-level collections --------------------------------------------------
-        bp.add_url_rule("/", view_func=self.__list_patients, methods=["GET"])
+        self.blueprint.add_url_rule("/", view_func=self.__list_patients, methods=["GET"])
 
         # --- 2 · Weeks ------------------------------------------------------------------
-        bp.add_url_rule(
+        self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks",
             "weeks",
             view_func=self.__list_weeks,
             methods=["GET"],
         )
-        bp.add_url_rule(
+        self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>",
             "week_summary",
             view_func=self.__week_summary,
@@ -63,14 +60,14 @@ class PatientBlueprint:
         )
 
         # --- 3 · Nights / Recordings ----------------------------------------------------
-        bp.add_url_rule(
+        self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights",
             "list_nights",
             view_func=self.__list_nights,
             methods=["GET"],
         )
         # Night meta
-        bp.add_url_rule(
+        self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>",
             "night_meta",
             view_func=self.__night_meta,
@@ -78,7 +75,7 @@ class PatientBlueprint:
         )
 
         # Down-sample
-        bp.add_url_rule(
+        self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/downsample",
             "downsample",
             view_func=self.__downsample,
@@ -86,29 +83,29 @@ class PatientBlueprint:
         )
 
         # ---- 3.1 metrics & raw signals -----------------------------
-        bp.add_url_rule(
+        self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/duration",
             "night_duration",
             view_func=self.__night_duration,
             methods=["GET"],
         )
-        bp.add_url_rule(
+        self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/mvc",
             "night_mvc",
             view_func=self.__night_mvc,
             methods=["GET"],
         )
-        bp.add_url_rule(
+        self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/sleep_stage",
             view_func=self.__get_sleep_stage,
             methods=["GET"],
         )
-        bp.add_url_rule(
+        self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/sleep_stage",
             view_func=self.__post_sleep_stage,
             methods=["POST"],
         )
-        bp.add_url_rule(
+        self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/emg/windows/<float:win>",
             "emg_window",
             view_func=self.__emg_window,
@@ -116,59 +113,39 @@ class PatientBlueprint:
         )
 
         # ---- 3.2 thresholds ---------------------------------------
-        bp.add_url_rule(
+        self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/thresholds",
             view_func=self.__get_thresholds,
             methods=["GET"],
         )
-        bp.add_url_rule(
+        self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/thresholds",
             view_func=self.__post_threshold,
             methods=["POST"],
         )
 
         # ---- 3.3 images -------------------------------------------
-        bp.add_url_rule(
+        self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/images",
             "night_images",
             view_func=self.__night_images,
             methods=["GET"],
         )
-        bp.add_url_rule(
+        self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/images/<string:image>",
             "serve_image",
             view_func=self.__serve_image,
             methods=["GET"],
         )
 
-        # --- 4 · Events & predictions --------------------------------
-        bp.add_url_rule(
-            "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/events",
-            "events",
-            view_func=self.__events,
-            methods=["GET", "POST"],
-        )
-        bp.add_url_rule(
-            "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/events/<string:eid>",
-            "patch_event",
-            view_func=self.__patch_event,
-            methods=["PATCH"],
-        )
-        bp.add_url_rule(
-            "/events/confirmed.xlsx",
-            "download_events",
-            view_func=self.__download_events,
-            methods=["GET"],
-        )
-
         # --- 5 · Model service ---------------------------------------
-        bp.add_url_rule(
+        self.blueprint.add_url_rule(
             "/model/feature-importance",
             "feature_importance",
             view_func=self.__feature_importance,
             methods=["GET"],
         )
-        bp.add_url_rule(
+        self.blueprint.add_url_rule(
             "/model/summary",
             "model_summary",
             view_func=self.__model_summary,
