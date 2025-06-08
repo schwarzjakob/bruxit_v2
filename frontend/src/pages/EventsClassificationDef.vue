@@ -990,14 +990,14 @@
             }
             await this.getData(this.tileIndex);
         },
-        async getData(idx) {
+        async getData(five_minute_window_index) {
             this.emgReceived = false;
             this.amountEvents = 0;
 
             const mvcPath = `http://127.0.0.1:5000/mvc/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
             const ndPath = `http://127.0.0.1:5000/night-duration/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
 
-            const emgPath = `http://127.0.0.1:5000/get-emg/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}/${idx}`;
+            const emgPath = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/emg_windows/${five_minute_window_index}`;
             const headers = {
                 Accept: 'application/json',
                 'Content-Type': 'application/json',

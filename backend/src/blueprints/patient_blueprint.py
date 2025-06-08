@@ -20,7 +20,8 @@ class PatientBlueprint:
                             /duration
                             /mvc
                             /ssd
-                            /emg/windows/{windowIdx}
+                            /emg_windows
+                                /{five_minute_window_index}
                             /thresholds
                                 /{sensor}
                             /images
@@ -43,7 +44,9 @@ class PatientBlueprint:
     def __setup_routes(self) -> None:
 
         # --- 1 · Top-level collections --------------------------------------------------
-        self.blueprint.add_url_rule("/", view_func=self.__list_patients, methods=["GET"])
+        self.blueprint.add_url_rule(
+            "/", view_func=self.__list_patients, methods=["GET"]
+        )
 
         # --- 2 · Weeks ------------------------------------------------------------------
         self.blueprint.add_url_rule(
@@ -106,9 +109,8 @@ class PatientBlueprint:
             methods=["POST"],
         )
         self.blueprint.add_url_rule(
-            "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/emg/windows/<float:win>",
-            "emg_window",
-            view_func=self.__emg_window,
+            "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/emg_windows/<float:five_minute_window_index>",
+            view_func=self.__get_emg_window,
             methods=["GET"],
         )
 
@@ -202,9 +204,13 @@ class PatientBlueprint:
         )
         return ("", 201) if created else ("", 200)
 
-    def __emg_window(self, patient_id: int, week: str, night: str, win: float):
+    def __get_emg_window(
+        self, patient_id: int, week: str, night: str, five_minute_window_index: float
+    ):
         return (
-            jsonify(self.__patient_service.emg_window(patient_id, week, night, win)),
+            self.__patient_service.get_emg_window(
+                patient_id, week, night, five_minute_window_index
+            ),
             200,
         )
 

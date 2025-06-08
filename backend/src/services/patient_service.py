@@ -3,8 +3,9 @@ from __future__ import annotations
 import io
 import logging
 import os
+import time
 from typing import Any, Dict, List, Tuple
-
+import numpy as np
 import pandas as pd
 import polars as pl
 import neurokit2 as nk
@@ -170,11 +171,81 @@ class PatientService:
         # return immediately (better for long nights).
         return True
 
-    def emg_window(
-        self, patient_id: int, week: str, night: str, idx: float
+    def get_emg_window(
+        self, patient_id: int, week: str, night: str, five_minute_window_index: float
     ) -> Dict[str, Any]:
-        # Straight copy of old get_emg
-        return from_routes_get_emg(patient_id, week, night, idx)  # type: ignore
+        downsampled_data_path = get_settings().downsampled_data_path
+        minimum_sampling_rate = get_settings().minimum_sampling_rate  # 200
+        emg_right_name = get_settings().emg_right_name  # 'MR'
+        emg_left_name = get_settings().emg_left_name  # 'ML'
+
+        start = time.time()
+
+        total_seconds = (
+            NightDuration.query.filter_by(patient_id=patient_id, week=week, file=night)
+            .first()
+            .seconds
+        )
+        print(total_seconds)
+        data_length = int(total_seconds * minimum_sampling_rate)
+
+        start_id = int(minimum_sampling_rate * 60 * 5 * five_minute_window_index)
+        end_id = start_id + minimum_sampling_rate * 60 * 5
+
+        print("open file")
+        data = pl.read_csv(
+            f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv",
+            columns=[emg_right_name, emg_left_name],
+            skip_rows_after_header=start_id,
+            n_rows=end_id - start_id,
+        )
+        features = pl.read_csv(
+            f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz_features.csv"
+        )
+
+        mr = pd.Series(data[emg_right_name].to_list())
+        ml = pd.Series(data[emg_left_name].to_list())
+
+        # Rectify
+        print("rectify the signal")
+        mr_rect = rectify_signal(mr)
+        ml_rect = rectify_signal(ml)
+
+        print("calculate rms")
+        mr_rms = rms(mr_rect, sampling=minimum_sampling_rate)
+        ml_rms = rms(ml_rect, sampling=minimum_sampling_rate)
+
+        print(mr_rms)
+
+        num_samples = len(mr_rms)
+        if end_id >= data_length:
+            print("last window")
+        start_time = (
+            start_id / minimum_sampling_rate
+        )  # Convert start index to seconds (since original is at 2000 Hz)
+
+        emg_time = np.linspace(
+            start_time,
+            start_time + num_samples / minimum_sampling_rate,
+            num_samples,
+            endpoint=False,
+        )
+
+        continuous_features = get_continuous_features(
+            features, five_minute_window_index, data_length=len(mr_rms)
+        )
+        print("len features: ")
+        print(len(continuous_features["std_mr"]))
+        emg_window = {
+            emg_right_name: mr_rms.tolist(),
+            emg_left_name: ml_rms.tolist(),
+            "EMG_t": emg_time.tolist(),
+        }
+        end = time.time()
+
+        print(f"{end-start} seconds taken.")
+
+        return emg_window | continuous_features
 
     # 3.2 thresholds ----------------------------------------------------
 
@@ -372,19 +443,3 @@ class PatientService:
             "file": r.file,
             "y_prob": r.y_prob,
         }
-
-
-# ---------------------------------------------------------------------- #
-#   Thin wrappers around legacy, procedural code
-#   -------------------------------------------------
-#   They keep your old algorithms untouched while letting the blueprint
-#   call them through the service.
-# ---------------------------------------------------------------------- #
-def from_routes_get_emg(patient_id: int, week: str, night: str, idx: float):
-    """
-    Uses the exact logic from the old `get_emg` function so results stay identical.
-    """
-    from src.blueprints.routes import get_emg  # noqa: WPS433
-
-    resp, _ = get_emg(patient_id, week, night, idx)
-    return resp
