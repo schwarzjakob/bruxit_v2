@@ -525,35 +525,39 @@
             });
 
         },
-        async loadImages(version) {
-            this.imgLoading = true
-            const baseUrl = `http://localhost:5000/night-images/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}/${version}`;
-            
-            const headers = {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            };
+        async loadImages() {
+            this.imgLoading = true;
 
-            // Make the request to get the image as a Blob
-            await axios.get(baseUrl, {headers})
-            .then(response => {
-                // Create a URL for the image blob
-                
-                // Assign the blob URL to your image source or handle it as needed
+            const baseUrl = `http://localhost:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/images`;
+
+            try {
+                const response = await axios.get(baseUrl, {
+                    headers: { Accept: 'application/json' }
+                });
+
                 this.images = response.data;
-                const wholeNightSignal = response.data.find(image => image.label === 'Whole Night Signal');
-                console.log("WHOLE NIGHT SIGNAL: ", wholeNightSignal)
+
+                // Select default image
+                const wholeNightSignal = this.images.find(image => image.label === 'Whole Night Signal');
                 if (wholeNightSignal) {
                     this.selectedImageLabel = wholeNightSignal.label;
-                    this.selectedImage = `${wholeNightSignal.src}?t=${new Date().getTime()}`; // Append timestamp
+                    // Use the image route for the actual image load
+                    this.selectedImage = `http://localhost:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/images/${wholeNightSignal.filename}?t=${Date.now()}`;
                 }
-                this.imgLoading = false
 
-                console.log("IMAGES: ", response.data)
-            })
-            .catch(err => {
-                console.log(err);
-            });
+                this.imgLoading = false;
+            } catch (error) {
+                console.error(error);
+            }
+        },
+        updateImage(value) {
+            const selectedImageData = this.images.find(image => image.label === value);
+            if (selectedImageData && selectedImageData.filename) {
+                const newUrl = `http://localhost:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/images/${selectedImageData.filename}?t=${Date.now()}`;
+                if (this.selectedImage !== newUrl) {
+                this.selectedImage = newUrl;
+                }
+            }
         },
         async getThresholds(){
             const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/thresholds`;
@@ -572,14 +576,6 @@
                     console.log(err)
                 })
         }, 
-        updateImage(value) {
-            const selectedImageData = this.images.find(image => image.label === value);
-            const timestamp = new Date().getTime();
-
-            if (selectedImageData) {
-                this.selectedImage = `${selectedImageData.src}?t=${timestamp}`; // Append timestamp to the src
-            }
-        },
         getFillColor(confirmed) {
             // Green for Confirm, Red for Discard
             return confirmed ? '#13ce66' : '#ff4949';

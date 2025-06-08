@@ -118,55 +118,6 @@ def patch_prediction_event_type(patient_id, week, file):
 
 
 @main.route(
-    "/night-images/<int:patient_id>/<string:week>/<string:file>/<string:version>",
-    methods=["GET"],
-)
-def get_night_images(patient_id, week, file, version):
-    downsampled_data_path = get_settings().downsampled_data_path
-    emg_right_name = get_settings().emg_right_name  # 'MR'
-    emg_left_name = get_settings().emg_left_name  # 'ML'
-
-    # List the generated images from the directory
-    output_dir = (
-        downsampled_data_path + f"/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv_images"
-    )
-    if not os.path.exists(output_dir) or version == "new":
-        data = pl.read_csv(
-            downsampled_data_path + f"/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv",
-            columns=[emg_right_name, emg_left_name],
-        )
-        mr = data.get_column(emg_right_name)
-        ml = data.get_column(emg_left_name)
-
-        predictions = EventPrediction.query.filter_by(
-            patient_id=patient_id, week=week, file=file
-        ).all()
-        print(predictions)
-        print(type(predictions))
-        generate_night_images(patient_id, week, file, mr, ml, predictions)
-
-    # List all images in the directory
-    image_files = [f for f in os.listdir(output_dir) if f.endswith(".png")]
-
-    print(image_files)
-
-    # Create URLs for the generated images
-    images_with_urls = [
-        {
-            "label": (
-                "Whole Night Signal"
-                if "whole_night_signal" in img
-                else f"Sleep Cycle {img.split('_')[2][:-4]}"
-            ),
-            "src": f"http://localhost:5000/image/{patient_id}/{week}/{file}/{img}",
-        }
-        for img in image_files
-    ]
-
-    return jsonify(images_with_urls), 200
-
-
-@main.route(
     "/image/<int:patient_id>/<string:week>/<string:file>/<string:img>", methods=["GET"]
 )
 def serve_image(patient_id, week, file, img):

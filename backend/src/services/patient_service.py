@@ -416,43 +416,53 @@ class PatientService:
 
     # 3.3 images --------------------------------------------------------
 
-    def list_images(
+    def get_night_images(
         self, patient_id: int, week: str, night: str, refresh: bool = False
-    ) -> List[Dict[str, str]]:
-        base = f"{self.settings.downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv_images"
+    ):
+        base = (
+            f"{self.settings.downsampled_data_path}/"
+            f"p{patient_id}_wk{week}/{night[:-4]}200Hz.csv_images"
+        )
+
         if refresh or not os.path.isdir(base):
-            self.__generate_images(patient_id, week, night)
-        imgs = [f for f in os.listdir(base) if f.endswith(".png")]
+            try:
+                mr, ml = self.__load_emg_signals(patient_id, week, night)
+            except FileNotFoundError:
+                # Optionally trigger downsample_and_persist_recording here, or raise
+                self.__logger.error("Downsampled EMG data missing for image generation")
+                raise
+
+            # Fetch events/predictions for marking on plots
+            predictions = EventPrediction.query.filter_by(
+                patient_id=patient_id, week=week, file=night
+            ).all()
+
+            generate_night_images(
+                patient_id, week, night, mr, ml, predictions
+            )  # TODO: Seperate GET and POST logic
+
+        files = sorted(f for f in os.listdir(base) if f.endswith(".png"))
         return [
             {
                 "label": (
                     "Whole Night Signal"
-                    if "whole_night_signal" in f
-                    else f"Sleep Cycle {f.split('_')[2][:-4]}"
+                    if "whole_night_signal" in file_name
+                    else f"Sleep Cycle {file_name.split('_')[2][:-4]}"
                 ),
-                "src": f"/patients/{patient_id}/weeks/{week}/nights/{night}/images/{f}",
+                "src": f"/patients/{patient_id}/weeks/{week}/nights/{night}/images/{file_name}",
+                "filename": file_name,
             }
-            for f in imgs
+            for file_name in files
         ]
 
-    def __generate_images(self, patient_id: int, week: str, night: str) -> None:
-        ds = self.settings.downsampled_data_path
-        data = pl.read_csv(
-            f"{ds}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv",
-            columns=[self.settings.emg_right_name, self.settings.emg_left_name],
-        )
-        mr = data.get_column(self.settings.emg_right_name)
-        ml = data.get_column(self.settings.emg_left_name)
-        preds = EventPrediction.query.filter_by(
-            patient_id=patient_id, week=week, file=night
-        ).all()
-        generate_night_images(patient_id, week, night, mr, ml, preds)
-
-    def serve_image(
-        self, patient_id: int, week: str, night: str, image: str
+    def get_night_image(
+        self, patient_id: int, week: str, night: str, filename: str
     ) -> Tuple[str, str]:
-        folder = f"{self.settings.downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv_images"
-        return folder, image
+        directory = (
+            f"{self.settings.downsampled_data_path}/"
+            f"p{patient_id}_wk{week}/{night[:-4]}200Hz.csv_images"
+        )
+        return directory, filename
 
     # ------------------------------------------------------------------ #
     #   4 · Events
@@ -560,3 +570,20 @@ class PatientService:
             "file": r.file,
             "y_prob": r.y_prob,
         }
+
+    def __load_emg_signals(self, patient_id, week, night):
+        downsampled_data_path = self.settings.downsampled_data_path
+        emg_right_name = self.settings.emg_right_name
+        emg_left_name = self.settings.emg_left_name
+
+        path = f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv"
+        if not os.path.isfile(path):
+            raise FileNotFoundError("Downsampled data missing.")
+
+        import pandas as pd
+
+        df = pd.read_csv(path)
+        mr = df[emg_right_name].values
+        ml = df[emg_left_name].values
+
+        return mr, ml

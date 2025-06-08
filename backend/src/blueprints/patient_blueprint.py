@@ -128,14 +128,12 @@ class PatientBlueprint:
         # ---- 3.3 images -------------------------------------------
         self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/images",
-            "night_images",
-            view_func=self.__night_images,
+            view_func=self.__get_night_images,
             methods=["GET"],
         )
         self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/images/<string:image>",
-            "serve_image",
-            view_func=self.__serve_image,
+            view_func=self.__get_night_image,
             methods=["GET"],
         )
 
@@ -244,17 +242,15 @@ class PatientBlueprint:
         )
 
     # 3.3 images
-    def __night_images(self, patient_id: int, week: str, night: str):
+    def __get_night_images(self, patient_id: int, week: str, night: str):
         refresh = request.args.get("refresh", "false").lower() == "true"
         return (
-            jsonify(
-                self.__patient_service.list_images(patient_id, week, night, refresh)
-            ),
+            self.__patient_service.get_night_images(patient_id, week, night, refresh),
             200,
         )
 
-    def __serve_image(self, patient_id: int, week: str, night: str, image: str):
-        directory, filename = self.__patient_service.serve_image(
+    def __get_night_image(self, patient_id: int, week: str, night: str, image: str):
+        directory, filename = self.__patient_service.get_night_image(
             patient_id, week, night, image
         )
         return send_from_directory(directory, filename)
