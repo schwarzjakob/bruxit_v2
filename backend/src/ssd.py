@@ -140,8 +140,10 @@ def find_selected_tiles(value):
 
 def analyze_hrv(patient_id, week, night, sampling_rate):
     downsampled_data_path = get_settings().downsampled_data_path
-    file_path = f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv"
-    ecg = pl.read_csv(file_path, columns=["ECG"])
+    file_path = (
+        f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-8]}200Hz.parquet"
+    )
+    ecg = pl.read_parquet(file_path, columns=["ECG"])
 
     ecg_clean = nk.ecg_clean(ecg, sampling_rate=sampling_rate)
     ecg_peaks = nk.ecg_findpeaks(ecg_clean, sampling_rate=sampling_rate)
@@ -175,7 +177,7 @@ def analyze_hrv(patient_id, week, night, sampling_rate):
 def return_HRV_analysis(patient_id, week_id, filename, sampling_rate):
     original_data_path = get_settings().original_data_path
     file_path = original_data_path + f"/p{patient_id}_wk{week_id}/{filename}"
-    ecg = pl.read_csv(file_path, columns=["ECG"])
+    ecg = pl.read_parquet(file_path, columns=["ECG"])
 
     ecg_clean = nk.ecg_clean(ecg, sampling_rate=sampling_rate)
     ecg_peaks = nk.ecg_findpeaks(ecg_clean, sampling_rate=sampling_rate)

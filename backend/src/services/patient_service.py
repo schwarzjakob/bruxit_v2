@@ -10,6 +10,7 @@ import pandas as pd
 import polars as pl
 import neurokit2 as nk
 import xgboost as xgb
+from pyarrow import ArrowInvalid
 
 from src.extensions import db
 from src.models.event_prediction import EventPrediction
@@ -35,6 +36,10 @@ from src.utils.utils import (
 )
 from src.ssd import analyze_hrv
 
+from src.infrastructure.repositories.raw_signal_repository import CsvRawSignalRepository
+from src.infrastructure.repositories.feature_repository import CsvFeatureRepository
+from src.infrastructure.repositories.event_repository import SqlAlchemyEventRepository
+
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -44,15 +49,30 @@ logging.basicConfig(
 class PatientService:
     """All heavy-lifting lives here."""
 
-    def __init__(self) -> None:
-        self.__logger = logging.getLogger(__name__)
+    def __init__(self, raw_repo=None, feat_repo=None, event_repo=None) -> None:
+        # don’t try to load settings or repos until we’re inside an app context
         self._settings = None
+        self._raw_repo = raw_repo
+        self._feat_repo = feat_repo
+        self._event_repo = event_repo or SqlAlchemyEventRepository()
+        self.__logger = logging.getLogger(__name__)
 
     @property
     def settings(self):
+        """Lazily load Settings from the DB under an active Flask context."""
         if self._settings is None:
             self._settings = get_settings()
+            self._init_repos()
         return self._settings
+
+    def _init_repos(self) -> None:
+        """Lazy‐init the CSV repositories once settings are available."""
+        if self._raw_repo is None or self._feat_repo is None:
+            base = self.settings.downsampled_data_path
+            if self._raw_repo is None:
+                self._raw_repo = CsvRawSignalRepository(base)
+            if self._feat_repo is None:
+                self._feat_repo = CsvFeatureRepository(base)
 
     # ------------------------------------------------------------------ #
     #   1 · Patients (top-level)
@@ -93,7 +113,7 @@ class PatientService:
             ).first()
             is not None,
             "downsampled": os.path.isfile(
-                f"{self.settings.downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv"
+                f"{self.settings.downsampled_data_path}/p{patient_id}_wk{week}/{night[:-8]}200Hz.parquet"
             ),
         }
         return {"duration_s": dur, **flags}
@@ -112,13 +132,13 @@ class PatientService:
         minimum_sampling_rate = get_settings().minimum_sampling_rate  # 200
 
         if os.path.isfile(
-            f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv"
+            f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-8]}200Hz.parquet"
         ):
             return "Data already downsampled"
 
         else:
             self.__logger.info("Open datasets")
-            data = pl.read_csv(
+            data = pl.read_parquet(
                 f"{original_data_path}/p{patient_id}_wk{week}/{night}",
                 columns=[emg_right_name, emg_left_name, ecg_name],
             )
@@ -209,8 +229,8 @@ class PatientService:
             if not os.path.exists(f"{downsampled_data_path}/p{patient_id}_wk{week}"):
                 os.makedirs(f"{downsampled_data_path}/p{patient_id}_wk{week}")
 
-            new_df.to_csv(
-                f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv"
+            new_df.to_parquet(
+                f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-8]}200Hz.parquet"
             )
 
             return "Data downsampled and saved correctly."
@@ -292,7 +312,7 @@ class PatientService:
     def get_emg_window(
         self, patient_id: int, week: str, night: str, five_minute_window_index: float
     ) -> Dict[str, Any]:
-        downsampled_data_path = get_settings().downsampled_data_path
+        # downsampled_data_path = get_settings().downsampled_data_path
         minimum_sampling_rate = get_settings().minimum_sampling_rate  # 200
         emg_right_name = get_settings().emg_right_name  # 'MR'
         emg_left_name = get_settings().emg_left_name  # 'ML'
@@ -311,15 +331,16 @@ class PatientService:
         end_id = start_id + minimum_sampling_rate * 60 * 5
 
         self.__logger.info("open file")
-        data = pl.read_csv(
-            f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv",
-            columns=[emg_right_name, emg_left_name],
-            skip_rows_after_header=start_id,
-            n_rows=end_id - start_id,
-        )
-        features = pl.read_csv(
-            f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz_features.csv"
-        )
+        raw_df = self._raw_repo.load(patient_id, week, night)
+        data = raw_df[[emg_right_name, emg_left_name]].iloc[start_id:end_id]
+
+        try:
+            features = self._feat_repo.load(patient_id, week, night)
+        except (FileNotFoundError, ArrowInvalid):
+            features = extract_features_for_prediction(
+                raw_df, sampling_rate=minimum_sampling_rate
+            )
+            self._feat_repo.save(features, patient_id, week, night)
 
         mr = pd.Series(data[emg_right_name].to_list())
         ml = pd.Series(data[emg_left_name].to_list())
@@ -349,9 +370,13 @@ class PatientService:
             endpoint=False,
         )
 
+        if isinstance(features, pd.DataFrame):
+            features = pl.from_pandas(features)
+
         continuous_features = get_continuous_features(
             features, five_minute_window_index, data_length=len(mr_rms)
         )
+
         self.__logger.info("len features: ")
         self.__logger.info(len(continuous_features["std_mr"]))
         emg_window = {
@@ -422,7 +447,7 @@ class PatientService:
     ):
         base = (
             f"{self.settings.downsampled_data_path}/"
-            f"p{patient_id}_wk{week}/{night[:-4]}200Hz.csv_images"
+            f"p{patient_id}_wk{week}/{night[:-8]}200Hz.parquet_images"
         )
 
         if refresh or not os.path.isdir(base):
@@ -461,7 +486,7 @@ class PatientService:
     ) -> Tuple[str, str]:
         directory = (
             f"{self.settings.downsampled_data_path}/"
-            f"p{patient_id}_wk{week}/{night[:-4]}200Hz.csv_images"
+            f"p{patient_id}_wk{week}/{night[:-8]}200Hz.parquet_images"
         )
         return directory, filename
 
@@ -476,7 +501,7 @@ class PatientService:
             patient_id=patient_id, week=week, file=night
         ).all()
 
-        downsampled_data_path = get_settings().downsampled_data_path
+        # downsampled_data_path = get_settings().downsampled_data_path
         model_path = get_settings().model_path
 
         minimum_sampling_rate = get_settings().minimum_sampling_rate  # 200
@@ -485,31 +510,17 @@ class PatientService:
 
         if not events:
 
-            if os.path.isfile(
-                f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz_features.csv"
-            ):
-                features = pd.read_csv(
-                    f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz_features.csv"
-                )
-
-                times = features.iloc[:, 1:3]
-                features = features.iloc[:, 3:43]
-
-            else:
-                sensor_data = pd.read_csv(
-                    f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv"
-                )
+            try:
+                features = self._feat_repo.load(patient_id, week, night)
+            except FileNotFoundError:
+                raw_df = self._raw_repo.load(patient_id, week, night)
                 features = extract_features_for_prediction(
-                    sensor_data, sampling_rate=minimum_sampling_rate
+                    raw_df, sampling_rate=minimum_sampling_rate
                 )
-                self.__logger.info("Writing features to csv")
+                self._feat_repo.save(features, patient_id, week, night)
 
-                features.to_csv(
-                    f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz_features.csv"
-                )
-
-                times = features.iloc[:, 0:2]
-                features = features.iloc[:, 2:42]
+            times = features.iloc[:, 0:2]
+            features = features.iloc[:, 2:42]
 
             # Load model
             loaded_model = xgb.XGBClassifier()
@@ -875,13 +886,15 @@ class PatientService:
         emg_right_name = self.settings.emg_right_name
         emg_left_name = self.settings.emg_left_name
 
-        path = f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv"
+        path = (
+            f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-8]}200Hz.parquet"
+        )
         if not os.path.isfile(path):
             raise FileNotFoundError("Downsampled data missing.")
 
         import pandas as pd
 
-        df = pd.read_csv(path)
+        df = pd.read_parquet(path)
         mr = df[emg_right_name].values
         ml = df[emg_left_name].values
 

@@ -25,8 +25,8 @@ def get_settings():
 
 def read_loc_csv(p, w, f):
     data_path = get_settings().original_data_path
-    f_short = f.rsplit("Fnorm.csv", 1)[0]
-    loc = pl.read_csv(data_path + f"/p{p}_wk{w}/{f_short}location_Bites.csv")
+    f_short = f.rsplit("Fnorm.parquet", 1)[0]
+    loc = pl.read_parquet(data_path + f"/p{p}_wk{w}/{f_short}location_Bites.parquet")
 
     return loc
 
@@ -101,7 +101,8 @@ def parse_data_structure(base_dir):
                 night_files = [
                     f
                     for f in os.listdir(folder_path)
-                    if f.endswith("Fnorm.csv") and not f.endswith("location_Bites.csv")
+                    if f.endswith("Fnorm.parquet")
+                    and not f.endswith("location_Bites.parquet")
                 ]
 
                 for file_name in night_files:
@@ -200,9 +201,7 @@ def generate_night_images(patient_id, week, file, mr, ml, predictions):
     emg_left_name = get_settings().emg_left_name  # 'ML'
     minimum_sampling_rate = get_settings().minimum_sampling_rate  # 200
 
-    output_dir = (
-        f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv_images/"
-    )
+    output_dir = f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-8]}200Hz.parquet_images/"
 
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
@@ -445,8 +444,8 @@ def get_continuous_features(features, idx, data_length=None):
 def get_new_event_metrics(patient_id, week, file, start_s, end_s):
     print("take features from where the event locates")
     downsampled_data_path = get_settings().downsampled_data_path
-    features = pl.read_csv(
-        f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-4]}200Hz_features.csv"
+    features = pl.read_parquet(
+        f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-8]}200Hz_features.parquet"
     )
 
     features_event = features.filter(

@@ -10,6 +10,7 @@ from src.blueprints.model_blueprint import ModelBlueprint
 # TODO: Add logging utility for entire application
 # TODO: Investigate utils.py
 # TODO: Investigate ssd.py and rename it (e.g. sleep_stage_service.py)
+# TODO: Migrate to polars entirely
 
 
 def create_app():
