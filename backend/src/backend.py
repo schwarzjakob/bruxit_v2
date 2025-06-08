@@ -6,7 +6,6 @@ from src.blueprints.settings_blueprint import SettingsBlueprint
 from src.blueprints.patient_blueprint import PatientBlueprint
 from src.blueprints.event_blueprint import EventBlueprint
 from src.blueprints.model_blueprint import ModelBlueprint
-from src.blueprints.auth import auth
 
 # TODO: Add logging utility for entire application
 # TODO: Investigate utils.py
@@ -32,7 +31,6 @@ def create_app():
     app.register_blueprint(patient_blueprint.blueprint)
     app.register_blueprint(event_blueprint.blueprint)
     app.register_blueprint(model_blueprint.blueprint)
-    app.register_blueprint(auth, url_prefix="/auth")
 
     # health check
     @app.route("/health")
