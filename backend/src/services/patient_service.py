@@ -269,7 +269,7 @@ class PatientService:
         ]
 
     # --- compute / (re)compute ---------------------------------------
-    def post_sleep_stage(
+    def generate_sleep_stage_segments(
         self, patient_id: int, week: str, night: str, sampling_rate: int
     ) -> bool:
         """Return True if we *started* a new computation, False if data existed."""
@@ -281,7 +281,9 @@ class PatientService:
             return False
 
         # Either run synchronously …
-        analyze_hrv(patient_id, week, night, sampling_rate)
+        analyze_hrv(
+            patient_id, week, night, sampling_rate
+        )  # TODO: Investigate utils script
 
         # … or kick off a Celery/RQ task here and
         # return immediately (better for long nights).

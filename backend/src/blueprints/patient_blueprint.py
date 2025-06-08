@@ -45,48 +45,14 @@ class PatientBlueprint:
 
     def __setup_routes(self) -> None:
 
-        # --- 1 · Top-level collections --------------------------------------------------
         self.blueprint.add_url_rule(
-            "/", view_func=self.__list_patients, methods=["GET"]
+            "/", view_func=self.__get_patients, methods=["GET"]
         )
-
-        # --- 2 · Weeks ------------------------------------------------------------------
-        self.blueprint.add_url_rule(
-            "/<int:patient_id>/weeks",
-            "weeks",
-            view_func=self.__list_weeks,
-            methods=["GET"],
-        )
-        self.blueprint.add_url_rule(
-            "/<int:patient_id>/weeks/<string:week>",
-            "week_summary",
-            view_func=self.__week_summary,
-            methods=["GET"],
-        )
-
-        # --- 3 · Nights / Recordings ----------------------------------------------------
-        self.blueprint.add_url_rule(
-            "/<int:patient_id>/weeks/<string:week>/nights",
-            "list_nights",
-            view_func=self.__list_nights,
-            methods=["GET"],
-        )
-        # Night meta
-        self.blueprint.add_url_rule(
-            "/<int:patient_id>/weeks/<string:week>/nights/<string:night>",
-            "night_meta",
-            view_func=self.__night_meta,
-            methods=["GET"],
-        )
-
-        # Down-sample
         self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/downsample",
             view_func=self.__downsample_and_persist_night_recording,
             methods=["POST"],
         )
-
-        # ---- 3.1 metrics & raw signals -----------------------------
         self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/duration",
             view_func=self.__get_night_duration,
@@ -112,8 +78,6 @@ class PatientBlueprint:
             view_func=self.__post_sleep_stage,
             methods=["POST"],
         )
-
-        # ---- 3.2 thresholds ---------------------------------------
         self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/thresholds",
             view_func=self.__get_thresholds,
@@ -124,8 +88,6 @@ class PatientBlueprint:
             view_func=self.__post_threshold,
             methods=["POST"],
         )
-
-        # ---- 3.3 images -------------------------------------------
         self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/images",
             view_func=self.__get_night_images,
@@ -136,8 +98,6 @@ class PatientBlueprint:
             view_func=self.__get_night_image,
             methods=["GET"],
         )
-
-        # --- 3.4 events ------------------------------------------------
         self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/events",
             view_func=self.__get_events,
@@ -153,41 +113,13 @@ class PatientBlueprint:
             view_func=self.__patch_event,
             methods=["PATCH"],
         )
-        # --- 5 · Model service ---------------------------------------
-        self.blueprint.add_url_rule(
-            "/model/feature-importance",
-            "feature_importance",
-            view_func=self.__feature_importance,
-            methods=["GET"],
-        )
-        self.blueprint.add_url_rule(
-            "/model/summary",
-            "model_summary",
-            view_func=self.__model_summary,
-            methods=["GET"],
-        )
 
     # ------------------------------------------------------------------ #
     #   Handlers  (private “dunder” methods)
     # ------------------------------------------------------------------ #
 
-    # 1 · Top-level
-    def __list_patients(self):
+    def __get_patients(self):
         return jsonify(self.__patient_service.list_patients()), 200
-
-    # 2 · Weeks
-    def __list_weeks(self, patient_id: int):
-        return jsonify(self.__patient_service.list_weeks(patient_id)), 200
-
-    def __week_summary(self, patient_id: int, week: str):
-        return jsonify(self.__patient_service.week_summary(patient_id, week)), 200
-
-    # 3 · Nights
-    def __list_nights(self, patient_id: int, week: str):
-        return jsonify(self.__patient_service.list_nights(patient_id, week)), 200
-
-    def __night_meta(self, patient_id: int, week: str, night: str):
-        return jsonify(self.__patient_service.night_meta(patient_id, week, night)), 200
 
     def __downsample_and_persist_night_recording(
         self, patient_id: int, week: str, night: str
@@ -199,7 +131,6 @@ class PatientBlueprint:
             202,
         )
 
-    # 3.1 metrics & raw
     def __get_night_maximum_voluntary_contraction(
         self, patient_id: int, week: str, night: str
     ):
@@ -225,18 +156,16 @@ class PatientBlueprint:
 
     def __get_sleep_stage(self, patient_id: int, week: str, night: str):
         data = self.__patient_service.fetch_sleep_stage(patient_id, week, night)
-        if data:  # rows already in DB
+        if data:
             return jsonify(data), 200
-        return "", 204  # nothing yet
+        return "", 204
 
     def __post_sleep_stage(self, patient_id: int, week: str, night: str):
         sampling_rate = int(request.args.get("sampling_rate", 200))
-
-        # heavy compute –  run sync or fire a background job
-        created = self.__patient_service.post_sleep_stage(
+        sleep_stage_segments = self.__patient_service.generate_sleep_stage_segments(
             patient_id, week, night, sampling_rate
         )
-        return ("", 201) if created else ("", 200)
+        return ("", 201) if sleep_stage_segments else ("", 200)
 
     # 3.2 thresholds
     def __get_thresholds(self, patient_id: int, week: str, night: str):
@@ -292,14 +221,3 @@ class PatientBlueprint:
         if "error" in result:
             return result, 404
         return result, 200
-
-    def __download_events(self):
-        directory, fname = self.__patient_service.download_confirmed_events()
-        return send_from_directory(directory, fname, as_attachment=True)
-
-    # 5 · Model
-    def __feature_importance(self):
-        return jsonify(self.__patient_service.feature_importance()), 200
-
-    def __model_summary(self):
-        return jsonify(self.__patient_service.model_summary()), 200

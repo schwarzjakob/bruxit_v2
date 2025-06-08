@@ -8,6 +8,10 @@ from src.blueprints.event_blueprint import EventBlueprint
 from src.blueprints.model_blueprint import ModelBlueprint
 from src.blueprints.auth import auth
 
+# TODO: Add logging utility for entire application
+# TODO: Investigate utils.py
+# TODO: Investigate ssd.py and rename it (e.g. sleep_stage_service.py)
+
 
 def create_app():
     app = Flask(__name__)
