@@ -490,6 +490,7 @@
             await axios.patch(path, payload, { headers })
                 .then(() => {
                     console.log("Justification of prediction updated!");
+                    this.eventJustifications[key].saved = true;
                 })
                 .catch(err => {
                     console.log(err);
