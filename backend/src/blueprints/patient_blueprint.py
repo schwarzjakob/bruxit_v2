@@ -17,16 +17,18 @@ class PatientBlueprint:
                 /{week}
                     /nights
                         /{nightId}
+                            /maximum_voluntary_contraction
                             /duration
-                            /mvc
-                            /ssd
+                            /sleep_stage
                             /emg_windows
                                 /{five_minute_window_index}
                             /thresholds
                                 /{sensor}
                             /images
                                 /{imageName}
-                            /downsample       [POST]
+                            /downsample
+                            /events
+                                /{eventId}
     """
 
     def __init__(self) -> None:
@@ -80,22 +82,24 @@ class PatientBlueprint:
         # Down-sample
         self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/downsample",
-            "downsample",
-            view_func=self.__downsample,
+            view_func=self.__downsample_and_persist_night_recording,
             methods=["POST"],
         )
 
         # ---- 3.1 metrics & raw signals -----------------------------
         self.blueprint.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/duration",
-            "night_duration",
-            view_func=self.__night_duration,
+            view_func=self.__get_night_duration,
             methods=["GET"],
         )
         self.blueprint.add_url_rule(
-            "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/mvc",
-            "night_mvc",
-            view_func=self.__night_mvc,
+            "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/maximum_voluntary_contraction",
+            view_func=self.__get_night_maximum_voluntary_contraction,
+            methods=["GET"],
+        )
+        self.blueprint.add_url_rule(
+            "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/emg_windows/<float:five_minute_window_index>",
+            view_func=self.__get_emg_window,
             methods=["GET"],
         )
         self.blueprint.add_url_rule(
@@ -107,11 +111,6 @@ class PatientBlueprint:
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/sleep_stage",
             view_func=self.__post_sleep_stage,
             methods=["POST"],
-        )
-        self.blueprint.add_url_rule(
-            "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/emg_windows/<float:five_minute_window_index>",
-            view_func=self.__get_emg_window,
-            methods=["GET"],
         )
 
         # ---- 3.2 thresholds ---------------------------------------
@@ -176,18 +175,39 @@ class PatientBlueprint:
     def __night_meta(self, patient_id: int, week: str, night: str):
         return jsonify(self.__patient_service.night_meta(patient_id, week, night)), 200
 
-    def __downsample(self, patient_id: int, week: str, night: str):
-        return jsonify(self.__patient_service.downsample(patient_id, week, night)), 202
+    def __downsample_and_persist_night_recording(
+        self, patient_id: int, week: str, night: str
+    ):
+        return (
+            self.__patient_service.downsample_and_persist_recording(
+                patient_id, week, night
+            ),
+            202,
+        )
 
     # 3.1 metrics & raw
-    def __night_duration(self, patient_id: int, week: str, night: str):
+    def __get_night_maximum_voluntary_contraction(
+        self, patient_id: int, week: str, night: str
+    ):
         return (
-            jsonify(self.__patient_service.night_duration(patient_id, week, night)),
+            self.__patient_service.get_night_maximum_voluntary_contraction(
+                patient_id, week, night
+            ),
             200,
         )
 
-    def __night_mvc(self, patient_id: int, week: str, night: str):
-        return jsonify(self.__patient_service.night_mvc(patient_id, week, night)), 200
+    def __get_night_duration(self, patient_id: int, week: str, night: str):
+        return self.__patient_service.get_night_duration(patient_id, week, night), 200
+
+    def __get_emg_window(
+        self, patient_id: int, week: str, night: str, five_minute_window_index: float
+    ):
+        return (
+            self.__patient_service.get_emg_window(
+                patient_id, week, night, five_minute_window_index
+            ),
+            200,
+        )
 
     def __get_sleep_stage(self, patient_id: int, week: str, night: str):
         data = self.__patient_service.fetch_sleep_stage(patient_id, week, night)
@@ -203,16 +223,6 @@ class PatientBlueprint:
             patient_id, week, night, sampling_rate
         )
         return ("", 201) if created else ("", 200)
-
-    def __get_emg_window(
-        self, patient_id: int, week: str, night: str, five_minute_window_index: float
-    ):
-        return (
-            self.__patient_service.get_emg_window(
-                patient_id, week, night, five_minute_window_index
-            ),
-            200,
-        )
 
     # 3.2 thresholds
     def __get_thresholds(self, patient_id: int, week: str, night: str):

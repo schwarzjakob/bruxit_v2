@@ -37,7 +37,9 @@ from src.utils.utils import (
 from src.ssd import analyze_hrv
 
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 
 
 class PatientService:
@@ -97,45 +99,160 @@ class PatientService:
         }
         return {"duration_s": dur, **flags}
 
-    def downsample(self, patient_id: int, week: str, night: str) -> Dict[str, str]:
-        # ---- Logic identical to old /downsample-data
+    def downsample_and_persist_recording(
+        self, patient_id: int, week: str, night: str
+    ) -> Dict[str, str]:
+        original_data_path = get_settings().original_data_path
+        downsampled_data_path = get_settings().downsampled_data_path
+
+        emg_right_name = get_settings().emg_right_name  # 'MR'
+        emg_left_name = get_settings().emg_left_name  # 'ML'
+        ecg_name = get_settings().ecg_name  # 'ECG'
+
+        original_sampling_rate = get_settings().original_sampling_rate  # 2000
+        minimum_sampling_rate = get_settings().minimum_sampling_rate  # 200
+
         if os.path.isfile(
-            f"{self.settings.downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv"
+            f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv"
         ):
-            return {"message": "Already down-sampled."}
+            return "Data already downsampled"
 
-        # .. copy of the original function
-        # (shortened – same code as before) ....................................
-        from src.routes import downsample_data  # type: ignore
+        else:
+            self.__logger.info("Open datasets")
+            data = pl.read_csv(
+                f"{original_data_path}/p{patient_id}_wk{week}/{night}",
+                columns=[emg_right_name, emg_left_name, ecg_name],
+            )
+            loc = read_loc_csv(patient_id, week, night)
 
-        downsample_data(patient_id, week, night)  # reuse unchanged logic
-        return {"message": "Down-sampling started."}
+            # Check that there are no null values in the recording
+            df_missing = data.filter(pl.any_horizontal(pl.all().is_null()))
+
+            self.__logger.info(df_missing)
+
+            if len(df_missing) > 0:
+                self.__logger.info("fill")
+                # Fill null values
+                data = data.with_columns(pl.all().fill_null(strategy="backward"))
+
+            mr = data.get_column(emg_right_name)
+            ml = data.get_column(emg_left_name)
+            ecg = data.get_column(ecg_name)
+
+            calculate_night_duration(
+                patient_id, week, night, len(mr), sampling_rate=original_sampling_rate
+            )
+
+            self.__logger.info("Extract MaximumVoluntaryContraction")
+
+            last_index = int(loc[2, 1])
+            self.__logger.info(last_index)
+            mr_short = mr[: last_index + 1]
+            ml_short = ml[: last_index + 1]
+
+            self.__logger.info("rectify")
+            self.__logger.info(mr_short)
+            self.__logger.info(type(mr_short))
+            mr_rect = rectify_signal(mr_short)
+            ml_rect = rectify_signal(ml_short)
+
+            mr_rect = pd.DataFrame(mr_rect)
+            ml_rect = pd.DataFrame(ml_rect)
+
+            self.__logger.info("calculate rms")
+            mr_rms = rms(mr_rect, sampling=original_sampling_rate)
+            ml_rms = rms(ml_rect, sampling=original_sampling_rate)
+
+            self.__logger.info("find mvc")
+            mr_mvc = find_mvc(mr_rms, loc)
+            ml_mvc = find_mvc(ml_rms, loc)
+
+            self.__logger.info("save MaximumVoluntaryContraction to db")
+            mr_mvc_db = MaximumVoluntaryContraction(
+                patient_id=patient_id,
+                week=week,
+                file=night,
+                sensor=emg_right_name,
+                mvc=mr_mvc.item(),
+            )
+            ml_mvc_db = MaximumVoluntaryContraction(
+                patient_id=patient_id,
+                week=week,
+                file=night,
+                sensor=emg_left_name,
+                mvc=ml_mvc.item(),
+            )
+            db.session.add(mr_mvc_db)
+            db.session.add(ml_mvc_db)
+
+            db.session.commit()
+
+            mr_ds = nk.signal_resample(
+                mr,
+                sampling_rate=original_sampling_rate,
+                desired_sampling_rate=minimum_sampling_rate,
+            )
+            ml_ds = nk.signal_resample(
+                ml,
+                sampling_rate=original_sampling_rate,
+                desired_sampling_rate=minimum_sampling_rate,
+            )
+            ecg_ds = nk.signal_resample(
+                ecg,
+                sampling_rate=original_sampling_rate,
+                desired_sampling_rate=minimum_sampling_rate,
+            )
+
+            new_df = pd.DataFrame(
+                {emg_right_name: mr_ds, emg_left_name: ml_ds, ecg_name: ecg_ds}
+            )
+
+            if not os.path.exists(f"{downsampled_data_path}/p{patient_id}_wk{week}"):
+                os.makedirs(f"{downsampled_data_path}/p{patient_id}_wk{week}")
+
+            new_df.to_csv(
+                f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv"
+            )
+
+            return "Data downsampled and saved correctly."
 
     # 3.1 metrics & raw -------------------------------------------------
 
-    def night_duration(self, patient_id: int, week: str, night: str) -> Dict[str, int]:
-        nd = NightDuration.query.filter_by(
+    def get_night_duration(
+        self, patient_id: int, week: str, night: str
+    ) -> Dict[str, int] | str:
+        night_duration = NightDuration.query.filter_by(
             patient_id=patient_id, week=week, file=night
         ).first()
-        return {"duration_s": nd.seconds} if nd else {}
+        self.__logger.info(night_duration.seconds)
 
-    def night_mvc(self, patient_id: int, week: str, night: str) -> Dict[str, int]:
-        mr = MaximumVoluntaryContraction.query.filter_by(
-            patient_id=patient_id,
-            week=week,
-            file=night,
-            sensor=self.settings.emg_right_name,
+        if night_duration is None:
+            return "No night duration for this night."
+
+        else:
+            return {"duration_s": night_duration.seconds}
+
+    def get_night_maximum_voluntary_contraction(
+        self, patient_id: int, week: str, night: str
+    ) -> Dict[str, int]:
+        emg_right_name = get_settings().emg_right_name  # 'MR'
+        emg_left_name = get_settings().emg_left_name  # 'ML'
+
+        mvc_mr = MaximumVoluntaryContraction.query.filter_by(
+            patient_id=patient_id, week=week, file=night, sensor=emg_right_name
         ).first()
-        ml = MaximumVoluntaryContraction.query.filter_by(
-            patient_id=patient_id,
-            week=week,
-            file=night,
-            sensor=self.settings.emg_left_name,
+        mvc_ml = MaximumVoluntaryContraction.query.filter_by(
+            patient_id=patient_id, week=week, file=night, sensor=emg_left_name
         ).first()
-        return {
-            "mvc_mr": mr.mvc if mr else None,
-            "mvc_ml": ml.mvc if ml else None,
-        }
+
+        if mvc_mr is None or mvc_ml is None:
+            return "No MaximumVoluntaryContraction for this night.", 404
+
+        else:
+            return {
+                "mvc_mr": mvc_mr.mvc,
+                "mvc_ml": mvc_ml.mvc,
+            }
 
     def fetch_sleep_stage(self, patient_id: int, week: str, night: str):
         rows = SleepStageSegment.query.filter_by(
@@ -186,13 +303,13 @@ class PatientService:
             .first()
             .seconds
         )
-        print(total_seconds)
+        self.__logger.info(total_seconds)
         data_length = int(total_seconds * minimum_sampling_rate)
 
         start_id = int(minimum_sampling_rate * 60 * 5 * five_minute_window_index)
         end_id = start_id + minimum_sampling_rate * 60 * 5
 
-        print("open file")
+        self.__logger.info("open file")
         data = pl.read_csv(
             f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv",
             columns=[emg_right_name, emg_left_name],
@@ -207,19 +324,19 @@ class PatientService:
         ml = pd.Series(data[emg_left_name].to_list())
 
         # Rectify
-        print("rectify the signal")
+        self.__logger.info("rectify the signal")
         mr_rect = rectify_signal(mr)
         ml_rect = rectify_signal(ml)
 
-        print("calculate rms")
+        self.__logger.info("calculate rms")
         mr_rms = rms(mr_rect, sampling=minimum_sampling_rate)
         ml_rms = rms(ml_rect, sampling=minimum_sampling_rate)
 
-        print(mr_rms)
+        self.__logger.info(mr_rms)
 
         num_samples = len(mr_rms)
         if end_id >= data_length:
-            print("last window")
+            self.__logger.info("last window")
         start_time = (
             start_id / minimum_sampling_rate
         )  # Convert start index to seconds (since original is at 2000 Hz)
@@ -234,8 +351,8 @@ class PatientService:
         continuous_features = get_continuous_features(
             features, five_minute_window_index, data_length=len(mr_rms)
         )
-        print("len features: ")
-        print(len(continuous_features["std_mr"]))
+        self.__logger.info("len features: ")
+        self.__logger.info(len(continuous_features["std_mr"]))
         emg_window = {
             emg_right_name: mr_rms.tolist(),
             emg_left_name: ml_rms.tolist(),
@@ -243,7 +360,7 @@ class PatientService:
         }
         end = time.time()
 
-        print(f"{end-start} seconds taken.")
+        self.__logger.info(f"{end-start} seconds taken.")
 
         return emg_window | continuous_features
 

@@ -994,8 +994,8 @@
             this.emgReceived = false;
             this.amountEvents = 0;
 
-            const mvcPath = `http://127.0.0.1:5000/mvc/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
-            const ndPath = `http://127.0.0.1:5000/night-duration/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
+            const mvcPath = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/maximum_voluntary_contraction`;
+            const ndPath = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/duration`;
 
             const emgPath = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/emg_windows/${five_minute_window_index}`;
             const headers = {

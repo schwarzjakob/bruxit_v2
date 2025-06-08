@@ -92,13 +92,12 @@ export default{
         },
         async downsampleSelectedPatientData(patientId, weekId, file_name){
             this.loading = true;
-            const path = `http://127.0.0.1:5000/downsample-data/${patientId}/${weekId}/${file_name}`
+            const path = `http://127.0.0.1:5000/patients/${patientId}/weeks/${weekId}/nights/${file_name}/downsample`;
             const headers = {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
+                'Accept': 'application/json'
             };
 
-            await axios.get(path, {headers})
+            await axios.post(path, null, {headers})
                 .then(() => {
                     this.loading = false;
                     console.log("Data downsampled")
