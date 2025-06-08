@@ -26,34 +26,6 @@ main = Blueprint("main", __name__)
 
 
 @main.route(
-    "/confirmed-events/<int:patient_id>/<string:week>/<string:file>", methods=["PATCH"]
-)
-def patch_confirmed_events(patient_id, week, file):
-    update = request.json
-    print(update)
-
-    prediction_to_update = EventPrediction.query.filter_by(
-        patient_id=patient_id, week=week, file=file, name=update["name"]
-    ).first()
-
-    if (prediction_to_update.start_s != update["start_s"]) or (
-        prediction_to_update.end_s != update["end_s"]
-    ):
-        print("update status because of different start or end")
-        prediction_to_update.status = "modified"
-
-    prediction_to_update.start_s = update["start_s"]
-    prediction_to_update.end_s = update["end_s"]
-    prediction_to_update.confirmed = update["confirmed"]
-
-    # Change y_pred?
-
-    db.session.commit()
-
-    return "Confirmation of event updated successfully.", 200
-
-
-@main.route(
     "/prediction-sensors/<int:patient_id>/<string:week>/<string:file>",
     methods=["PATCH"],
 )
@@ -82,24 +54,6 @@ def patch_prediction_sensors(patient_id, week, file):
 
 
 @main.route(
-    "/justification/<int:patient_id>/<string:week>/<string:file>", methods=["PATCH"]
-)
-def patch_justification(patient_id, week, file):
-    update = request.json
-    print(update)
-    name = update["name"]
-    justification = update["justification"]
-
-    justification_to_update = EventPrediction.query.filter_by(
-        patient_id=patient_id, week=week, file=file, name=name
-    ).first()
-    justification_to_update.justification = justification
-    db.session.commit()
-
-    return "Justification updated successfully.", 200
-
-
-@main.route(
     "/prediction-event-type/<int:patient_id>/<string:week>/<string:file>",
     methods=["PATCH"],
 )
@@ -115,22 +69,6 @@ def patch_prediction_event_type(patient_id, week, file):
     db.session.commit()
 
     return "Event type updated successfully.", 200
-
-
-@main.route(
-    "/image/<int:patient_id>/<string:week>/<string:file>/<string:img>", methods=["GET"]
-)
-def serve_image(patient_id, week, file, img):
-    downsampled_data_path = get_settings().downsampled_data_path
-
-    folder_path = (
-        downsampled_data_path + f"/p{patient_id}_wk{week}/{file[:-4]}200Hz.csv_images/"
-    )
-    print(folder_path + img)
-    if os.path.exists(folder_path + img):
-        return send_from_directory(folder_path, img)
-    else:
-        return abort(404)  # File not found
 
 
 @main.route(

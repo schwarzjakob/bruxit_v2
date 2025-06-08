@@ -10,7 +10,7 @@ import pandas as pd
 import polars as pl
 import neurokit2 as nk
 import xgboost as xgb
-from flask import current_app, make_response
+from flask import current_app, make_response, jsonify
 from sqlalchemy import func
 
 from src.extensions import db
@@ -488,31 +488,37 @@ class PatientService:
         patient_id: int,
         week: str,
         night: str,
-        eid: str,
-        payload: Dict[str, Any],
-    ) -> Dict[str, str]:
-        event: EventPrediction | None = EventPrediction.query.filter_by(
-            patient_id=patient_id, week=week, file=night, name=eid
+        event_name: str,
+        patch_data: Dict[str, Any],
+    ):
+        event = EventPrediction.query.filter_by(
+            patient_id=patient_id, week=week, file=night, name=event_name
         ).first()
 
         if not event:
-            return {"error": "Event not found."}
+            return {"error": "Event not found"}
 
-        # Merge payload into SQL row
-        for field in (
+        allowed_fields = [
             "start_s",
             "end_s",
             "confirmed",
+            "justification",
             "sensor",
             "event_type",
             "status",
-            "justification",
-        ):
-            if field in payload:
-                setattr(event, field, payload[field])
+        ]
+
+        for field in allowed_fields:
+            if field in patch_data:
+                setattr(event, field, patch_data[field])
+
+        if (
+            "start_s" in patch_data or "end_s" in patch_data
+        ) and event.status != "modified":
+            event.status = "modified"
 
         db.session.commit()
-        return {"message": "Event patched."}
+        return {"message": "Event updated successfully."}
 
     # ---- download all confirmed events --------------------------------
 

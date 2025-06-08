@@ -137,6 +137,12 @@ class PatientBlueprint:
             methods=["GET"],
         )
 
+        # --- 3.4 events ------------------------------------------------
+        self.blueprint.add_url_rule(
+            "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/events/<string:event_name>",
+            view_func=self.__patch_event,
+            methods=["PATCH"],
+        )
         # --- 5 · Model service ---------------------------------------
         self.blueprint.add_url_rule(
             "/model/feature-importance",
@@ -268,14 +274,14 @@ class PatientBlueprint:
             201,
         )
 
-    def __patch_event(self, patient_id: int, week: str, night: str, eid: str):
-        patch = request.get_json()
-        return (
-            jsonify(
-                self.__patient_service.patch_event(patient_id, week, night, eid, patch)
-            ),
-            200,
+    def __patch_event(self, patient_id: int, week: str, night: str, event_name: str):
+        patch_data = request.get_json()
+        result = self.__patient_service.patch_event(
+            patient_id, week, night, event_name, patch_data
         )
+        if "error" in result:
+            return result, 404
+        return result, 200
 
     def __download_events(self):
         directory, fname = self.__patient_service.download_confirmed_events()

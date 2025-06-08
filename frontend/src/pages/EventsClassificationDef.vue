@@ -478,26 +478,22 @@
                 await this.drawSSDHeatMap();
             }
         },
-        async saveJustification(key, value){
-            console.log("patch on db")
-            console.log(key, value)
-            this.eventJustifications[key].saved = true;
+        async saveJustification(key, value) {
+            const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/events/${key}`;
 
-            const path = `http://127.0.0.1:5000/justification/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
-
-            let payload= {'name': key, 'justification': value.justification};
+            let payload = { justification: value.justification };
 
             const headers = {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             };
-            await axios.patch(path, payload, {headers})
+            await axios.patch(path, payload, { headers })
                 .then(() => {
-                    console.log("Justification of prediction updated!")
+                    console.log("Justification of prediction updated!");
                 })
-                .catch(err=>{
-                    console.log(err)
-                })
+                .catch(err => {
+                    console.log(err);
+                });
         },
         editJustification(key){
             this.eventJustifications[key].saved = false;
@@ -746,31 +742,21 @@
             this.eventForm.start = this.startSelection;
             this.eventForm.end = this.endSelection;
         },
-        async updateConfirmedEvents(keyEvent, boolConfirmed, value){
-            this.confirmedEvents[keyEvent] = boolConfirmed;
-            const path = `http://127.0.0.1:5000/confirmed-events/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
-            let payload= {};
-            payload['name'] = keyEvent;
-            payload['confirmed'] = boolConfirmed;
-            payload['start_s'] = value.start_s;
-            payload['end_s'] = value.end_s;
-            console.log("PAYLOAD: ", payload)
+        async updateConfirmedEvents(keyEvent, boolConfirmed) {
+            const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/events/${keyEvent}`;
+            let payload = { confirmed: boolConfirmed };
+
             const headers = {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             };
-            await axios.patch(path, payload, {headers})
+            await axios.patch(path, payload, { headers })
                 .then(() => {
-                    console.log("Confirmed events updated!")
-                    this.updateMarkArea(keyEvent, value)
-                    this.predictions[keyEvent].confirmed = boolConfirmed;
-                    this.drawECHeatMap()
-
+                    console.log("Confirmed events updated!");
                 })
-                .catch(err=>{
-                    console.log(err)
-                })
-
+                .catch(err => {
+                    console.log(err);
+                });
         },
         updateMarkArea(key, value){
             console.log(value.start_s, value.end_s);
@@ -786,12 +772,13 @@
                 }
                 if(this.confirmedEvents[key] == true){
                     console.log("update confirm")
-                    const path = `http://127.0.0.1:5000/confirmed-events/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
-                    let payload= {};
-                    payload['name'] = key;
-                    payload['start_s'] = value.start_s;
-                    payload['end_s'] = value.end_s;
-                    payload['confirmed'] = this.confirmedEvents[key];
+                    const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/events/${keyEvent}`;
+                    let payload = {
+                        confirmed: this.confirmedEvents[key],
+                        start_s: value.start_s,
+                        end_s: value.end_s,
+                        // optionally other fields if you want to patch more
+                    };
                     console.log("PAYLOAD: ", payload)
                     const headers = {
                         'Accept': 'application/json',
