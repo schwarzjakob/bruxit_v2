@@ -118,15 +118,13 @@ class PatientBlueprint:
         # ---- 3.2 thresholds ---------------------------------------
         bp.add_url_rule(
             "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/thresholds",
-            "thresholds",
-            view_func=self.__thresholds,
+            view_func=self.__get_thresholds,
             methods=["GET"],
         )
         bp.add_url_rule(
-            "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/thresholds/<string:sensor>",
-            "update_threshold",
-            view_func=self.__update_threshold,
-            methods=["PUT"],
+            "/<int:patient_id>/weeks/<string:week>/nights/<string:night>/thresholds",
+            view_func=self.__post_threshold,
+            methods=["POST"],
         )
 
         # ---- 3.3 images -------------------------------------------
@@ -234,17 +232,18 @@ class PatientBlueprint:
         )
 
     # 3.2 thresholds
-    def __thresholds(self, patient_id: int, week: str, night: str):
+    def __get_thresholds(self, patient_id: int, week: str, night: str):
         return (
             jsonify(self.__patient_service.get_thresholds(patient_id, week, night)),
             200,
         )
 
-    def __update_threshold(self, patient_id: int, week: str, night: str, sensor: str):
+    def __post_threshold(self, patient_id: int, week: str, night: str):
         payload = request.get_json()
+        sensor = payload.get("sensor")
         return (
             jsonify(
-                self.__patient_service.update_threshold(
+                self.__patient_service.post_threshold(
                     patient_id, week, night, sensor, payload
                 )
             ),

@@ -556,7 +556,7 @@
             });
         },
         async getThresholds(){
-            const path = `http://127.0.0.1:5000/patient-threshold/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`
+            const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/thresholds`;
             const headers = {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
@@ -1585,7 +1585,7 @@
             console.log("thresholdMr: ", thresholdMr)
             console.log(typeof thresholdMr)
             
-            const path = `http://127.0.0.1:5000/patient-threshold/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
+            const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/thresholds`;
             let payload= {};
             payload['sensor'] = "MR";
             payload['threshold'] = thresholdMr;
@@ -1634,7 +1634,7 @@
                 })
         },
         async updateThresholdMl(thresholdMl){
-            const path = `http://127.0.0.1:5000/patient-threshold/${this.$store.state.patientId}/${this.$store.state.weekId}/${this.$store.state.file}`;
+            const path = `http://127.0.0.1:5000/patients/${this.$store.state.patientId}/weeks/${this.$store.state.weekId}/nights/${this.$store.state.file}/thresholds`;
             let payload= {};
             payload['sensor'] = "ML";
             payload['threshold'] = thresholdMl;

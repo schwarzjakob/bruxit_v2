@@ -66,40 +66,40 @@ class PatientService:
     #   2 · Weeks
     # ------------------------------------------------------------------ #
 
-    def list_weeks(self, pid: int) -> List[str]:
-        struct = self.patient_data(pid)
+    def list_weeks(self, patient_id: int) -> List[str]:
+        struct = self.patient_data(patient_id)
         return sorted(struct.keys())
 
-    def week_summary(self, pid: int, week: str) -> Dict[str, Any]:
+    def week_summary(self, patient_id: int, week: str) -> Dict[str, Any]:
         # Quick example summary
-        nights = self.list_nights(pid, week)
-        return {"patientId": pid, "week": week, "nNights": len(nights)}
+        nights = self.list_nights(patient_id, week)
+        return {"patientId": patient_id, "week": week, "nNights": len(nights)}
 
     # ------------------------------------------------------------------ #
     #   3 · Nights
     # ------------------------------------------------------------------ #
 
-    def list_nights(self, pid: int, week: str) -> List[str]:
-        struct = self.patient_data(pid)
+    def list_nights(self, patient_id: int, week: str) -> List[str]:
+        struct = self.patient_data(patient_id)
         return sorted(struct.get(week, []))
 
-    def night_meta(self, pid: int, week: str, night: str) -> Dict[str, Any]:
-        dur = self.night_duration(pid, week, night).get("duration_s")
+    def night_meta(self, patient_id: int, week: str, night: str) -> Dict[str, Any]:
+        dur = self.night_duration(patient_id, week, night).get("duration_s")
         flags = {
             "hasSSD": SleepStageSegment.query.filter_by(
-                patient_id=pid, week=week, file=night
+                patient_id=patient_id, week=week, file=night
             ).first()
             is not None,
             "downsampled": os.path.isfile(
-                f"{self.settings.downsampled_data_path}/p{pid}_wk{week}/{night[:-4]}200Hz.csv"
+                f"{self.settings.downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv"
             ),
         }
         return {"duration_s": dur, **flags}
 
-    def downsample(self, pid: int, week: str, night: str) -> Dict[str, str]:
+    def downsample(self, patient_id: int, week: str, night: str) -> Dict[str, str]:
         # ---- Logic identical to old /downsample-data
         if os.path.isfile(
-            f"{self.settings.downsampled_data_path}/p{pid}_wk{week}/{night[:-4]}200Hz.csv"
+            f"{self.settings.downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv"
         ):
             return {"message": "Already down-sampled."}
 
@@ -107,32 +107,38 @@ class PatientService:
         # (shortened – same code as before) ....................................
         from src.routes import downsample_data  # type: ignore
 
-        downsample_data(pid, week, night)  # reuse unchanged logic
+        downsample_data(patient_id, week, night)  # reuse unchanged logic
         return {"message": "Down-sampling started."}
 
     # 3.1 metrics & raw -------------------------------------------------
 
-    def night_duration(self, pid: int, week: str, night: str) -> Dict[str, int]:
+    def night_duration(self, patient_id: int, week: str, night: str) -> Dict[str, int]:
         nd = NightDuration.query.filter_by(
-            patient_id=pid, week=week, file=night
+            patient_id=patient_id, week=week, file=night
         ).first()
         return {"duration_s": nd.seconds} if nd else {}
 
-    def night_mvc(self, pid: int, week: str, night: str) -> Dict[str, int]:
+    def night_mvc(self, patient_id: int, week: str, night: str) -> Dict[str, int]:
         mr = MaximumVoluntaryContraction.query.filter_by(
-            patient_id=pid, week=week, file=night, sensor=self.settings.emg_right_name
+            patient_id=patient_id,
+            week=week,
+            file=night,
+            sensor=self.settings.emg_right_name,
         ).first()
         ml = MaximumVoluntaryContraction.query.filter_by(
-            patient_id=pid, week=week, file=night, sensor=self.settings.emg_left_name
+            patient_id=patient_id,
+            week=week,
+            file=night,
+            sensor=self.settings.emg_left_name,
         ).first()
         return {
             "mvc_mr": mr.mvc if mr else None,
             "mvc_ml": ml.mvc if ml else None,
         }
 
-    def fetch_sleep_stage(self, pid: int, week: str, night: str):
+    def fetch_sleep_stage(self, patient_id: int, week: str, night: str):
         rows = SleepStageSegment.query.filter_by(
-            patient_id=pid, week=week, file=night
+            patient_id=patient_id, week=week, file=night
         ).all()
         return [
             {
@@ -147,75 +153,87 @@ class PatientService:
 
     # --- compute / (re)compute ---------------------------------------
     def post_sleep_stage(
-        self, pid: int, week: str, night: str, sampling_rate: int
+        self, patient_id: int, week: str, night: str, sampling_rate: int
     ) -> bool:
         """Return True if we *started* a new computation, False if data existed."""
 
         # If rows already exist → do nothing, stay idempotent
         if SleepStageSegment.query.filter_by(
-            patient_id=pid, week=week, file=night
+            patient_id=patient_id, week=week, file=night
         ).first():
             return False
 
         # Either run synchronously …
-        analyze_hrv(pid, week, night, sampling_rate)
+        analyze_hrv(patient_id, week, night, sampling_rate)
 
         # … or kick off a Celery/RQ task here and
         # return immediately (better for long nights).
         return True
 
-    def emg_window(self, pid: int, week: str, night: str, idx: float) -> Dict[str, Any]:
+    def emg_window(
+        self, patient_id: int, week: str, night: str, idx: float
+    ) -> Dict[str, Any]:
         # Straight copy of old get_emg
-        return from_routes_get_emg(pid, week, night, idx)  # type: ignore
+        return from_routes_get_emg(patient_id, week, night, idx)  # type: ignore
 
     # 3.2 thresholds ----------------------------------------------------
 
-    def get_thresholds(self, pid: int, week: str, night: str) -> Dict[str, int]:
-        emg_r, emg_l = self.settings.emg_right_name, self.settings.emg_left_name
-        recs = SensorThreshold.query.filter_by(
-            patient_id=pid, week=week, file=night
+    def get_thresholds(self, patient_id: int, week: str, night: str) -> Dict[str, int]:
+        emg_right_sensor, emg_left_sensor = (
+            self.settings.emg_right_name,
+            self.settings.emg_left_name,
+        )
+        threshold_records = SensorThreshold.query.filter_by(
+            patient_id=patient_id, week=week, file=night
         ).all()
 
-        def _default() -> Dict[str, int]:
-            return {emg_r: 10, emg_l: 10}
+        def default_thresholds() -> Dict[str, int]:
+            return {emg_right_sensor: 10, emg_left_sensor: 10}
 
-        if not recs:
-            return _default()
+        if not threshold_records:
+            return default_thresholds()
 
-        result = {r.sensor: r.threshold_value for r in recs}
-        for s in (emg_r, emg_l):
-            result.setdefault(s, 10)
+        result = {record.sensor: record.threshold_value for record in threshold_records}
+        for sensor in (emg_right_sensor, emg_left_sensor):
+            result.setdefault(sensor, 10)
         return result
 
-    def update_threshold(
-        self, pid: int, week: str, night: str, sensor: str, payload: Dict[str, Any]
+    def post_threshold(
+        self,
+        patient_id: int,
+        week: str,
+        night: str,
+        sensor: str,
+        payload: Dict[str, Any],
     ) -> Dict[str, str]:
-        thr = payload.get("threshold")
-        rec = SensorThreshold.query.filter_by(
-            patient_id=pid, week=week, file=night, sensor=sensor
+        threshold_value = payload.get("threshold")
+        existing_record = SensorThreshold.query.filter_by(
+            patient_id=patient_id, week=week, file=night, sensor=sensor
         ).first()
-        if rec:
-            rec.threshold_value = thr
+
+        # TODO: Refactor this into PUT and POST methods
+        if existing_record:
+            existing_record.threshold_value = threshold_value
         else:
-            rec = SensorThreshold(
-                patient_id=pid,
+            new_record = SensorThreshold(
+                patient_id=patient_id,
                 week=week,
                 file=night,
                 sensor=sensor,
-                threshold_value=thr,
+                threshold_value=threshold_value,
             )
-            db.session.add(rec)
+            db.session.add(new_record)
         db.session.commit()
         return {"message": "Threshold updated."}
 
     # 3.3 images --------------------------------------------------------
 
     def list_images(
-        self, pid: int, week: str, night: str, refresh: bool = False
+        self, patient_id: int, week: str, night: str, refresh: bool = False
     ) -> List[Dict[str, str]]:
-        base = f"{self.settings.downsampled_data_path}/p{pid}_wk{week}/{night[:-4]}200Hz.csv_images"
+        base = f"{self.settings.downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv_images"
         if refresh or not os.path.isdir(base):
-            self.__generate_images(pid, week, night)
+            self.__generate_images(patient_id, week, night)
         imgs = [f for f in os.listdir(base) if f.endswith(".png")]
         return [
             {
@@ -224,59 +242,59 @@ class PatientService:
                     if "whole_night_signal" in f
                     else f"Sleep Cycle {f.split('_')[2][:-4]}"
                 ),
-                "src": f"/patients/{pid}/weeks/{week}/nights/{night}/images/{f}",
+                "src": f"/patients/{patient_id}/weeks/{week}/nights/{night}/images/{f}",
             }
             for f in imgs
         ]
 
-    def __generate_images(self, pid: int, week: str, night: str) -> None:
+    def __generate_images(self, patient_id: int, week: str, night: str) -> None:
         ds = self.settings.downsampled_data_path
         data = pl.read_csv(
-            f"{ds}/p{pid}_wk{week}/{night[:-4]}200Hz.csv",
+            f"{ds}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv",
             columns=[self.settings.emg_right_name, self.settings.emg_left_name],
         )
         mr = data.get_column(self.settings.emg_right_name)
         ml = data.get_column(self.settings.emg_left_name)
         preds = EventPrediction.query.filter_by(
-            patient_id=pid, week=week, file=night
+            patient_id=patient_id, week=week, file=night
         ).all()
-        generate_night_images(pid, week, night, mr, ml, preds)
+        generate_night_images(patient_id, week, night, mr, ml, preds)
 
     def serve_image(
-        self, pid: int, week: str, night: str, image: str
+        self, patient_id: int, week: str, night: str, image: str
     ) -> Tuple[str, str]:
-        folder = f"{self.settings.downsampled_data_path}/p{pid}_wk{week}/{night[:-4]}200Hz.csv_images"
+        folder = f"{self.settings.downsampled_data_path}/p{patient_id}_wk{week}/{night[:-4]}200Hz.csv_images"
         return folder, image
 
     # ------------------------------------------------------------------ #
     #   4 · Events
     # ------------------------------------------------------------------ #
 
-    def list_events(self, pid: int, week: str, night: str) -> Dict[str, Any]:
+    def list_events(self, patient_id: int, week: str, night: str) -> Dict[str, Any]:
         recs = EventPrediction.query.filter_by(
-            patient_id=pid, week=week, file=night
+            patient_id=patient_id, week=week, file=night
         ).all()
         return {r.name: self.__to_event_dict(r) for r in recs}
 
     def create_event(
-        self, pid: int, week: str, night: str, payload: Dict[str, Any]
+        self, patient_id: int, week: str, night: str, payload: Dict[str, Any]
     ) -> Dict[str, str]:
         # Direct port of old POST logic (shortened)
         from src.routes import predict_events  # type: ignore
 
-        predict_events(pid, week, night)  # executes old logic
+        predict_events(patient_id, week, night)  # executes old logic
         return {"message": "Event queued / inserted."}
 
     def patch_event(
         self,
-        pid: int,
+        patient_id: int,
         week: str,
         night: str,
         eid: str,
         payload: Dict[str, Any],
     ) -> Dict[str, str]:
         event: EventPrediction | None = EventPrediction.query.filter_by(
-            patient_id=pid, week=week, file=night, name=eid
+            patient_id=patient_id, week=week, file=night, name=eid
         ).first()
 
         if not event:
@@ -362,11 +380,11 @@ class PatientService:
 #   They keep your old algorithms untouched while letting the blueprint
 #   call them through the service.
 # ---------------------------------------------------------------------- #
-def from_routes_get_emg(pid: int, week: str, night: str, idx: float):
+def from_routes_get_emg(patient_id: int, week: str, night: str, idx: float):
     """
     Uses the exact logic from the old `get_emg` function so results stay identical.
     """
     from src.blueprints.routes import get_emg  # noqa: WPS433
 
-    resp, _ = get_emg(pid, week, night, idx)
+    resp, _ = get_emg(patient_id, week, night, idx)
     return resp
