@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+from typing import List, Dict, Any
+from collections import defaultdict
 import pandas as pd
 import polars as pl
 from src.extensions import duckdb_instance
@@ -15,7 +17,43 @@ class DuckDbRawRepository(RawSignalRepository):
     def __init__(self):
         self.conn = duckdb_instance.conn
 
-    # keep `.load()` for the raw 2 000 Hz table unchanged …
+    def load_patients_structure(self) -> Dict[str, Dict[str, List[Dict[str, Any]]]]:
+        """
+        Returns a nested dict of
+          { patient_id: { week: [ { "file_name": ..., "size_gb": ... }, … ] }, … }
+        """
+        # grab every night file recorded
+        query = """
+            SELECT DISTINCT
+              patient_id,
+              week,
+              file AS file_name,
+              COUNT(*) AS row_count
+            FROM raw.Fnorm
+            GROUP BY patient_id, week, file
+            ORDER BY patient_id, week, file
+        """
+        df = self.conn.execute(query).fetchdf()
+
+        # build the exact same shape your UI expects
+        data: Dict[str, Dict[str, List[Dict[str, Any]]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
+        for _, row in df.iterrows():
+            pid = str(int(row["patient_id"]))
+            wk = row["week"]
+            fn = row["file_name"]
+            # we don't have the parquet filesize here, so just supply row_count (or null)
+            size_gb = None
+            data[pid][wk].append(
+                {
+                    "file_name": fn,
+                    "size_gb": size_gb,
+                }
+            )
+
+        # convert to plain dicts
+        return {p: dict(wks) for p, wks in data.items()}
 
     def load_raw(self, patient_id: int, week: str, night: str) -> pd.DataFrame:
         query = "SELECT * FROM raw.Fnorm WHERE patient_id = ? AND week = ? AND file = ?"
@@ -28,13 +66,13 @@ class DuckDbRawRepository(RawSignalRepository):
         short = night.rsplit("Fnorm.parquet", 1)[0]
         loc_file = f"{short}location_Bites.parquet"
 
-        q = """
+        query = """
             SELECT begin_idx, end_idx, duration_s
             FROM   raw.location_bites
             WHERE  patient_id = ? AND week = ? AND file = ?
             ORDER  BY begin_idx
         """
-        pdf = self.conn.execute(q, (patient_id, week, loc_file)).fetchdf()
+        pdf = self.conn.execute(query, (patient_id, week, loc_file)).fetchdf()
         return pl.from_pandas(pdf)
 
     # NEW helper for storing the 200 Hz frame

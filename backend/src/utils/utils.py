@@ -76,46 +76,6 @@ def find_mvc(signal_rms, loc):
         return signal_mvc
 
 
-def parse_data_structure(base_dir):
-    data_dict = defaultdict(lambda: defaultdict(list))
-
-    # Match folder names (e.g., p1_wk1, p1_wk3-4)
-    folder_pattern = re.compile(r"^(p\d+)_wk(\d+(-\d+)?)$")
-
-    for root, dirs, files in os.walk(base_dir):
-        for dir_name in dirs:
-            match = folder_pattern.match(dir_name)
-            if match:
-                patient_id = match.group(1)[1:]
-                week_id = match.group(2)
-                # Collect files in directory
-                folder_path = os.path.join(root, dir_name)
-                night_files = [
-                    f
-                    for f in os.listdir(folder_path)
-                    if f.endswith("Fnorm.parquet")
-                    and not f.endswith("location_Bites.parquet")
-                ]
-
-                for file_name in night_files:
-                    file_path = os.path.join(folder_path, file_name)
-
-                    # Calculate file size in GB
-                    file_size_bytes = os.path.getsize(file_path)
-                    file_size_gb = file_size_bytes / (1024**3)
-
-                    data_dict[patient_id][week_id].append(
-                        {
-                            "file_name": file_name,
-                            "size_gb": round(
-                                file_size_gb, 2
-                            ),  # Rounded to 4 decimal places
-                        }
-                    )
-
-    return dict(data_dict)
-
-
 def sort_week_key(week):
     """Extract numerical parts of the week to enable correct sorting."""
     # Find all numeric parts of the week identifier (e.g., "13-14" becomes [13, 14])
@@ -124,17 +84,6 @@ def sort_week_key(week):
         numbers[0],
         numbers[-1],
     )  # Sort by the first number, then by the last number if range exists
-
-
-def sort_data_structure(data_dict):
-    sorted_dict = {}
-
-    for patient, weeks in data_dict.items():
-        # Sort weeks using the custom key
-        sorted_weeks = dict(sorted(weeks.items(), key=lambda x: sort_week_key(x[0])))
-        sorted_dict[patient] = sorted_weeks
-
-    return sorted_dict
 
 
 def calculate_night_duration(patient_id, week, file_name, file_length, sampling_rate):
@@ -431,7 +380,6 @@ def get_continuous_features(features, idx, data_length=None):
 
             count += 1
     return continuous_features
-
 
 
 def add_new_prediction(

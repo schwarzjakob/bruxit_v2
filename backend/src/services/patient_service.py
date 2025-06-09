@@ -27,10 +27,8 @@ from src.utils.utils import (
     find_mvc,
     generate_night_images,
     get_continuous_features,
-    parse_data_structure,
     rectify_signal,
     rms,
-    sort_data_structure,
 )
 from src.ssd import analyze_hrv
 
@@ -58,9 +56,8 @@ class PatientService:
     # ------------------------------------------------------------------ #
 
     def list_patients(self) -> List[int]:
-        patients = sort_data_structure(
-            parse_data_structure(get_settings().original_data_path)
-        )
+        patients = self._raw_repo.load_patients_structure()
+        self.__logger.info(patients)
         return patients
 
     # ------------------------------------------------------------------ #
