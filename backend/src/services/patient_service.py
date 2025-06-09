@@ -36,8 +36,10 @@ from src.utils.utils import (
 )
 from src.ssd import analyze_hrv
 
-from src.infrastructure.repositories.raw_signal_repository import CsvRawSignalRepository
-from src.infrastructure.repositories.feature_repository import CsvFeatureRepository
+from src.infrastructure.repositories.duckdb_raw_repository import DuckDbRawRepository
+from src.infrastructure.repositories.duckdb_feature_repository import (
+    DuckDbFeatureRepository,
+)
 from src.infrastructure.repositories.event_repository import SqlAlchemyEventRepository
 
 
@@ -49,30 +51,12 @@ logging.basicConfig(
 class PatientService:
     """All heavy-lifting lives here."""
 
-    def __init__(self, raw_repo=None, feat_repo=None, event_repo=None) -> None:
+    def __init__(self) -> None:
         # don’t try to load settings or repos until we’re inside an app context
-        self._settings = None
-        self._raw_repo = raw_repo
-        self._feat_repo = feat_repo
-        self._event_repo = event_repo or SqlAlchemyEventRepository()
+        self._raw_repo = DuckDbRawRepository()
+        self._feat_repo = DuckDbFeatureRepository()
+        self._event_repo = SqlAlchemyEventRepository()
         self.__logger = logging.getLogger(__name__)
-
-    @property
-    def settings(self):
-        """Lazily load Settings from the DB under an active Flask context."""
-        if self._settings is None:
-            self._settings = get_settings()
-            self._init_repos()
-        return self._settings
-
-    def _init_repos(self) -> None:
-        """Lazy‐init the CSV repositories once settings are available."""
-        if self._raw_repo is None or self._feat_repo is None:
-            base = self.settings.downsampled_data_path
-            if self._raw_repo is None:
-                self._raw_repo = CsvRawSignalRepository(base)
-            if self._feat_repo is None:
-                self._feat_repo = CsvFeatureRepository(base)
 
     # ------------------------------------------------------------------ #
     #   1 · Patients (top-level)
@@ -80,7 +64,7 @@ class PatientService:
 
     def list_patients(self) -> List[int]:
         patients = sort_data_structure(
-            parse_data_structure(self.settings.original_data_path)
+            parse_data_structure(get_settings().original_data_path)
         )
         return patients
 
@@ -112,18 +96,13 @@ class PatientService:
                 patient_id=patient_id, week=week, file=night
             ).first()
             is not None,
-            "downsampled": os.path.isfile(
-                f"{self.settings.downsampled_data_path}/p{patient_id}_wk{week}/{night[:-8]}200Hz.parquet"
-            ),
+            "downsampled": self._raw_repo.exists_downsampled(patient_id, week, night),
         }
         return {"duration_s": dur, **flags}
 
     def downsample_and_persist_recording(
         self, patient_id: int, week: str, night: str
     ) -> Dict[str, str]:
-        original_data_path = get_settings().original_data_path
-        downsampled_data_path = get_settings().downsampled_data_path
-
         emg_right_name = get_settings().emg_right_name  # 'MR'
         emg_left_name = get_settings().emg_left_name  # 'ML'
         ecg_name = get_settings().ecg_name  # 'ECG'
@@ -131,109 +110,110 @@ class PatientService:
         original_sampling_rate = get_settings().original_sampling_rate  # 2000
         minimum_sampling_rate = get_settings().minimum_sampling_rate  # 200
 
-        if os.path.isfile(
-            f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-8]}200Hz.parquet"
-        ):
-            return "Data already downsampled"
+        # ── early exit if already processed (check DuckDB instead of file) ──
+        try:
+            existing = self._feat_repo.load(patient_id, week, night)
+            if not existing.empty:
+                return {"message": "Data already downsampled and features in DB"}
+        except Exception:
+            # table might be empty or just created—fall through
+            pass
 
-        else:
-            self.__logger.info("Open datasets")
-            data = pl.read_parquet(
-                f"{original_data_path}/p{patient_id}_wk{week}/{night}",
-                columns=[emg_right_name, emg_left_name, ecg_name],
-            )
-            loc = read_loc_csv(patient_id, week, night)
+        self.__logger.info("Load 2 k Hz recording from DuckDB")
+        raw_df = self._raw_repo.load_raw(patient_id, week, night)[
+            [emg_right_name, emg_left_name, ecg_name]
+        ].astype("float32")
+        data = pl.from_pandas(raw_df)
+        loc = read_loc_csv(patient_id, week, night)
 
-            # Check that there are no null values in the recording
-            df_missing = data.filter(pl.any_horizontal(pl.all().is_null()))
+        # fill nulls if any
+        df_missing = data.filter(pl.any_horizontal(pl.all().is_null()))
+        self.__logger.info(df_missing)
+        if len(df_missing) > 0:
+            self.__logger.info("fill")
+            data = data.with_columns(pl.all().fill_null(strategy="backward"))
 
-            self.__logger.info(df_missing)
+        mr = data.get_column(emg_right_name)
+        ml = data.get_column(emg_left_name)
+        ecg = data.get_column(ecg_name)
 
-            if len(df_missing) > 0:
-                self.__logger.info("fill")
-                # Fill null values
-                data = data.with_columns(pl.all().fill_null(strategy="backward"))
+        calculate_night_duration(
+            patient_id, week, night, len(mr), sampling_rate=original_sampling_rate
+        )
 
-            mr = data.get_column(emg_right_name)
-            ml = data.get_column(emg_left_name)
-            ecg = data.get_column(ecg_name)
+        self.__logger.info("Extract MaximumVoluntaryContraction")
+        last_index = int(loc[2, 1])
+        mr_short = mr[: last_index + 1]
+        ml_short = ml[: last_index + 1]
 
-            calculate_night_duration(
-                patient_id, week, night, len(mr), sampling_rate=original_sampling_rate
-            )
+        self.__logger.info("rectify")
+        mr_rect = rectify_signal(mr_short)
+        ml_rect = rectify_signal(ml_short)
 
-            self.__logger.info("Extract MaximumVoluntaryContraction")
+        mr_rect = pd.DataFrame(mr_rect)
+        ml_rect = pd.DataFrame(ml_rect)
 
-            last_index = int(loc[2, 1])
-            self.__logger.info(last_index)
-            mr_short = mr[: last_index + 1]
-            ml_short = ml[: last_index + 1]
+        self.__logger.info("calculate rms")
+        mr_rms = rms(mr_rect, sampling=original_sampling_rate)
+        ml_rms = rms(ml_rect, sampling=original_sampling_rate)
 
-            self.__logger.info("rectify")
-            self.__logger.info(mr_short)
-            self.__logger.info(type(mr_short))
-            mr_rect = rectify_signal(mr_short)
-            ml_rect = rectify_signal(ml_short)
+        self.__logger.info("find mvc")
+        mr_mvc = find_mvc(mr_rms, loc)
+        ml_mvc = find_mvc(ml_rms, loc)
 
-            mr_rect = pd.DataFrame(mr_rect)
-            ml_rect = pd.DataFrame(ml_rect)
+        self.__logger.info("save MaximumVoluntaryContraction to db")
+        mr_mvc_db = MaximumVoluntaryContraction(
+            patient_id=patient_id,
+            week=week,
+            file=night,
+            sensor=emg_right_name,
+            mvc=mr_mvc.item(),
+        )
+        ml_mvc_db = MaximumVoluntaryContraction(
+            patient_id=patient_id,
+            week=week,
+            file=night,
+            sensor=emg_left_name,
+            mvc=ml_mvc.item(),
+        )
+        db.session.add(mr_mvc_db)
+        db.session.add(ml_mvc_db)
+        db.session.commit()
 
-            self.__logger.info("calculate rms")
-            mr_rms = rms(mr_rect, sampling=original_sampling_rate)
-            ml_rms = rms(ml_rect, sampling=original_sampling_rate)
+        # ── downsample to 200 Hz ────────────────────────────────────────────
+        mr_ds = nk.signal_resample(
+            mr,
+            sampling_rate=original_sampling_rate,
+            desired_sampling_rate=minimum_sampling_rate,
+        )
+        ml_ds = nk.signal_resample(
+            ml,
+            sampling_rate=original_sampling_rate,
+            desired_sampling_rate=minimum_sampling_rate,
+        )
+        ecg_ds = nk.signal_resample(
+            ecg,
+            sampling_rate=original_sampling_rate,
+            desired_sampling_rate=minimum_sampling_rate,
+        )
 
-            self.__logger.info("find mvc")
-            mr_mvc = find_mvc(mr_rms, loc)
-            ml_mvc = find_mvc(ml_rms, loc)
+        new_df = pd.DataFrame(
+            {emg_right_name: mr_ds, emg_left_name: ml_ds, ecg_name: ecg_ds}
+        )
 
-            self.__logger.info("save MaximumVoluntaryContraction to db")
-            mr_mvc_db = MaximumVoluntaryContraction(
-                patient_id=patient_id,
-                week=week,
-                file=night,
-                sensor=emg_right_name,
-                mvc=mr_mvc.item(),
-            )
-            ml_mvc_db = MaximumVoluntaryContraction(
-                patient_id=patient_id,
-                week=week,
-                file=night,
-                sensor=emg_left_name,
-                mvc=ml_mvc.item(),
-            )
-            db.session.add(mr_mvc_db)
-            db.session.add(ml_mvc_db)
+        # ── **REPLACE** parquet write with feature extraction + DB save ────
+        features_df = extract_features_for_prediction(
+            new_df,
+            sampling_rate=minimum_sampling_rate,
+        )
+        self._feat_repo.save(features_df, patient_id, week, night)
+        self.__logger.info(
+            f"Saved {len(features_df)} feature windows for patient {patient_id}, week {week}, night {night}"
+        )
 
-            db.session.commit()
+        self._raw_repo.save_downsampled(new_df, patient_id, week, night)
 
-            mr_ds = nk.signal_resample(
-                mr,
-                sampling_rate=original_sampling_rate,
-                desired_sampling_rate=minimum_sampling_rate,
-            )
-            ml_ds = nk.signal_resample(
-                ml,
-                sampling_rate=original_sampling_rate,
-                desired_sampling_rate=minimum_sampling_rate,
-            )
-            ecg_ds = nk.signal_resample(
-                ecg,
-                sampling_rate=original_sampling_rate,
-                desired_sampling_rate=minimum_sampling_rate,
-            )
-
-            new_df = pd.DataFrame(
-                {emg_right_name: mr_ds, emg_left_name: ml_ds, ecg_name: ecg_ds}
-            )
-
-            if not os.path.exists(f"{downsampled_data_path}/p{patient_id}_wk{week}"):
-                os.makedirs(f"{downsampled_data_path}/p{patient_id}_wk{week}")
-
-            new_df.to_parquet(
-                f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-8]}200Hz.parquet"
-            )
-
-            return "Data downsampled and saved correctly."
+        return {"message": "Downsampled, MVC saved, and features stored in database"}
 
     # 3.1 metrics & raw -------------------------------------------------
 
@@ -331,14 +311,16 @@ class PatientService:
         end_id = start_id + minimum_sampling_rate * 60 * 5
 
         self.__logger.info("open file")
-        raw_df = self._raw_repo.load(patient_id, week, night)
-        data = raw_df[[emg_right_name, emg_left_name]].iloc[start_id:end_id]
-
+        data = self._raw_repo.load_downsampled(
+            patient_id, week, night, start_id, end_id - 1
+        )
+        self.__logger.info("downsampled loaded")
         try:
             features = self._feat_repo.load(patient_id, week, night)
         except (FileNotFoundError, ArrowInvalid):
             features = extract_features_for_prediction(
-                raw_df, sampling_rate=minimum_sampling_rate
+                raw_df=self._raw_repo.load_raw(patient_id, week, night),
+                sampling_rate=minimum_sampling_rate,
             )
             self._feat_repo.save(features, patient_id, week, night)
 
@@ -394,8 +376,8 @@ class PatientService:
 
     def get_thresholds(self, patient_id: int, week: str, night: str) -> Dict[str, int]:
         emg_right_sensor, emg_left_sensor = (
-            self.settings.emg_right_name,
-            self.settings.emg_left_name,
+            get_settings().emg_right_name,
+            get_settings().emg_left_name,
         )
         threshold_records = SensorThreshold.query.filter_by(
             patient_id=patient_id, week=week, file=night
@@ -446,7 +428,7 @@ class PatientService:
         self, patient_id: int, week: str, night: str, refresh: bool = False
     ):
         base = (
-            f"{self.settings.downsampled_data_path}/"
+            f"{get_settings().downsampled_data_path}/"
             f"p{patient_id}_wk{week}/{night[:-8]}200Hz.parquet_images"
         )
 
@@ -485,7 +467,7 @@ class PatientService:
         self, patient_id: int, week: str, night: str, filename: str
     ) -> Tuple[str, str]:
         directory = (
-            f"{self.settings.downsampled_data_path}/"
+            f"{get_settings().downsampled_data_path}/"
             f"p{patient_id}_wk{week}/{night[:-8]}200Hz.parquet_images"
         )
         return directory, filename
@@ -513,14 +495,24 @@ class PatientService:
             try:
                 features = self._feat_repo.load(patient_id, week, night)
             except FileNotFoundError:
-                raw_df = self._raw_repo.load(patient_id, week, night)
+                raw_df = self._raw_repo.load_raw(patient_id, week, night)
                 features = extract_features_for_prediction(
                     raw_df, sampling_rate=minimum_sampling_rate
                 )
                 self._feat_repo.save(features, patient_id, week, night)
 
-            times = features.iloc[:, 0:2]
-            features = features.iloc[:, 2:42]
+            # ── tidy feature frame ────────────────────────────────────────────────
+            meta_cols = ["patient_id", "week", "file", "window_idx"]
+            time_cols = ["start_time", "end_time"]
+
+            # keep the two time columns **before** dropping them
+            times = features[time_cols].copy()
+
+            # feed only numerics to XGBoost
+            numeric_cols = [
+                c for c in features.columns if c not in meta_cols + time_cols
+            ]
+            features = features[numeric_cols]
 
             # Load model
             loaded_model = xgb.XGBClassifier()
@@ -861,7 +853,9 @@ class PatientService:
 
     def __load_model(self) -> xgb.XGBClassifier:
         model = xgb.XGBClassifier()
-        model.load_model(f"{self.settings.model_path}/{self.settings.model_file_name}")
+        model.load_model(
+            f"{get_settings().model_path}/{get_settings().model_file_name}"
+        )
         return model
 
     def __to_event_dict(self, r: EventPrediction) -> Dict[str, Any]:
@@ -882,20 +876,8 @@ class PatientService:
         }
 
     def __load_emg_signals(self, patient_id, week, night):
-        downsampled_data_path = self.settings.downsampled_data_path
-        emg_right_name = self.settings.emg_right_name
-        emg_left_name = self.settings.emg_left_name
+        emg_right_name = get_settings().emg_right_name
+        emg_left_name = get_settings().emg_left_name
 
-        path = (
-            f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-8]}200Hz.parquet"
-        )
-        if not os.path.isfile(path):
-            raise FileNotFoundError("Downsampled data missing.")
-
-        import pandas as pd
-
-        df = pd.read_parquet(path)
-        mr = df[emg_right_name].values
-        ml = df[emg_left_name].values
-
-        return mr, ml
+        df = self._raw_repo.load_downsampled(patient_id, week, night)  # ← new
+        return df[emg_right_name].to_numpy(), df[emg_left_name].to_numpy()

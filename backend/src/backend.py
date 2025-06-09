@@ -1,6 +1,7 @@
+import os
 from flask import Flask, jsonify
 from src.config import Config
-from src.extensions import db, migrate, cors
+from src.extensions import db, migrate, cors, duckdb_instance
 
 from src.blueprints.settings_blueprint import SettingsBlueprint
 from src.blueprints.patient_blueprint import PatientBlueprint
@@ -20,6 +21,9 @@ def create_app():
     # initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        duckdb_instance.init_app(app)
+
     cors.init_app(app, resources={r"/*": {"origins": "*"}})
 
     settings_blueprint = SettingsBlueprint()
