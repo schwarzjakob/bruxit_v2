@@ -142,7 +142,7 @@ def generate_night_images(patient_id, week, file, mr, ml, predictions):
     emg_left_name = get_settings().emg_left_name  # 'ML'
     minimum_sampling_rate = get_settings().minimum_sampling_rate  # 200
 
-    output_dir = f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-8]}200Hz.parquet_images/"
+    output_dir = f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-8]}200Hz/"
 
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)

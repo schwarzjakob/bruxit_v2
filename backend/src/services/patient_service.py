@@ -422,7 +422,7 @@ class PatientService:
     ):
         base = (
             f"{get_settings().downsampled_data_path}/"
-            f"p{patient_id}_wk{week}/{night[:-8]}200Hz.parquet_images"
+            f"p{patient_id}_wk{week}/{night[:-8]}200Hz"
         )
 
         if refresh or not os.path.isdir(base):
@@ -461,7 +461,7 @@ class PatientService:
     ) -> Tuple[str, str]:
         directory = (
             f"{get_settings().downsampled_data_path}/"
-            f"p{patient_id}_wk{week}/{night[:-8]}200Hz.parquet_images"
+            f"p{patient_id}_wk{week}/{night[:-8]}200Hz"
         )
         return directory, filename
 
