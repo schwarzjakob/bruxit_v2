@@ -37,7 +37,7 @@ the refinement of the model.
 - macOS: ``source .venv/bin/activate``
 - Windows: ``.venv\Scripts\activate``
 - ``pip install -r requirements.txt``
-- Set up environment variables by creating a `.env` file in the `backend` folder with: ``echo "DATABASE_URL=postgresql://postgres@localhost:5432/bruxit" > .env``
+- Set up environment variables by creating a `.env` file in the `backend` folder with: ``echo "DATABASE_URL=postgresql://postgres@localhost:5432/bruxit\nDUCKDB_FILE=backend/data/bruxit.duckdb" > .env``
 - Start PostgreSQL:
   - macOS: ``brew services start postgresql@14``
   - Windows: ``pg_ctl -D "C:\Program Files\PostgreSQL\14\data" start``

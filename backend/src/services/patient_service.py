@@ -27,9 +27,7 @@ from src.utils.utils import (
     find_mvc,
     generate_night_images,
     get_continuous_features,
-    get_new_event_metrics,
     parse_data_structure,
-    read_loc_csv,
     rectify_signal,
     rms,
     sort_data_structure,
@@ -40,8 +38,6 @@ from src.infrastructure.repositories.duckdb_raw_repository import DuckDbRawRepos
 from src.infrastructure.repositories.duckdb_feature_repository import (
     DuckDbFeatureRepository,
 )
-from src.infrastructure.repositories.event_repository import SqlAlchemyEventRepository
-
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -55,7 +51,6 @@ class PatientService:
         # don’t try to load settings or repos until we’re inside an app context
         self._raw_repo = DuckDbRawRepository()
         self._feat_repo = DuckDbFeatureRepository()
-        self._event_repo = SqlAlchemyEventRepository()
         self.__logger = logging.getLogger(__name__)
 
     # ------------------------------------------------------------------ #
@@ -124,7 +119,8 @@ class PatientService:
             [emg_right_name, emg_left_name, ecg_name]
         ].astype("float32")
         data = pl.from_pandas(raw_df)
-        loc = read_loc_csv(patient_id, week, night)
+        loc = self._raw_repo.load_location_bites(patient_id, week, night)
+        self.__logger.info(loc)
 
         # fill nulls if any
         df_missing = data.filter(pl.any_horizontal(pl.all().is_null()))
@@ -690,7 +686,10 @@ class PatientService:
         print(start_s, end_s, justification)
 
         # Calculate metrics
-        metrics = get_new_event_metrics(patient_id, week, night, start_s, end_s)
+        metrics = self._feat_repo.get_event_metrics(
+            patient_id, week, night, start_s, end_s
+        )
+        metrics = {k: np.array(v) for k, v in metrics.items()}
 
         print(metrics)
 

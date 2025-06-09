@@ -34,6 +34,8 @@ from src.models.sleep_stage_segment import SleepStageSegment
 from src.extensions import db
 import os
 
+from src.infrastructure.repositories.duckdb_raw_repository import DuckDbRawRepository
+
 
 def add_matrix_coordinates(df, x_max=18):
     df = df.copy()
@@ -139,11 +141,10 @@ def find_selected_tiles(value):
 
 
 def analyze_hrv(patient_id, week, night, sampling_rate):
-    downsampled_data_path = get_settings().downsampled_data_path
-    file_path = (
-        f"{downsampled_data_path}/p{patient_id}_wk{week}/{night[:-8]}200Hz.parquet"
-    )
-    ecg = pl.read_parquet(file_path, columns=["ECG"])
+    repo = DuckDbRawRepository()
+    df = repo.load_downsampled(patient_id, week, night)
+    # df is a pandas.DataFrame with columns [sample_idx, MR, ML, ECG]
+    ecg = df["ECG"].to_numpy()
 
     ecg_clean = nk.ecg_clean(ecg, sampling_rate=sampling_rate)
     ecg_peaks = nk.ecg_findpeaks(ecg_clean, sampling_rate=sampling_rate)
@@ -168,64 +169,6 @@ def analyze_hrv(patient_id, week, night, sampling_rate):
     add_sleep_stage_segments_to_db(
         patient_id, week, night, hrv_with_coords
     )  # TODO: Refactor this into service
-
-    print(hrv_with_coords)
-
-    return hrv_with_coords.to_json(orient="records")
-
-
-def return_HRV_analysis(patient_id, week_id, filename, sampling_rate):
-    original_data_path = get_settings().original_data_path
-    file_path = original_data_path + f"/p{patient_id}_wk{week_id}/{filename}"
-    ecg = pl.read_parquet(file_path, columns=["ECG"])
-
-    ecg_clean = nk.ecg_clean(ecg, sampling_rate=sampling_rate)
-    ecg_peaks = nk.ecg_findpeaks(ecg_clean, sampling_rate=sampling_rate)
-    info, r_peaks_corrected = nk.signal_fixpeaks(
-        ecg_peaks,
-        sampling_rate=sampling_rate,
-        iterative=False,
-        show=False,
-        method="Kubios",
-    )
-
-    # Calculate RR intervals
-    rr_intervals = np.diff(r_peaks_corrected) / sampling_rate * 1000
-
-    # Insert fake data point
-    rr_intervals_adjusted = np.insert(rr_intervals, 0, rr_intervals[0])
-
-    # Calculate time axis
-    time_r_peaks = (
-        r_peaks_corrected[1:] / sampling_rate
-    )  # Time corresponding to the RR intervals
-    time_r_peaks_adjusted = np.insert(
-        time_r_peaks, 0, time_r_peaks[0] - rr_intervals[0]
-    )  # Add a time point for the fake interval
-
-    rri_adj_df = pd.DataFrame(
-        data={"RRI": rr_intervals_adjusted, "RRI_t": time_r_peaks_adjusted}
-    )
-
-    downsampled_data_path = get_settings().downsampled_data_path
-    path = f"{downsampled_data_path}/p{patient_id}_wk{week_id}"
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-    rri_adj_df.to_csv(path + f"/{filename}_rri_256Hz.csv")
-
-    # Calculate HRV metrics
-    hrv = compute_HRV_metrics(r_peaks_corrected, sampling_rate)
-
-    hrv_cut = hrv[["HRV_LFHF", "HRV_SDNN"]]
-
-    hrv_with_coords = add_matrix_coordinates(hrv_cut)
-
-    hrv_with_coords["stage"] = hrv_with_coords["HRV_LFHF"].apply(categorize_sleep_stage)
-    hrv_with_coords["selected"] = hrv_with_coords["stage"].apply(find_selected_tiles)
-
-    # Add sleep stage detection to DB
-    add_sleep_stage_segments_to_db(patient_id, week_id, filename, hrv_with_coords)
 
     print(hrv_with_coords)
 

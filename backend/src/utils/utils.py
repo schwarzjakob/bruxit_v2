@@ -23,14 +23,6 @@ def get_settings():
     return Settings.query.first()
 
 
-def read_loc_csv(p, w, f):
-    data_path = get_settings().original_data_path
-    f_short = f.rsplit("Fnorm.parquet", 1)[0]
-    loc = pl.read_parquet(data_path + f"/p{p}_wk{w}/{f_short}location_Bites.parquet")
-
-    return loc
-
-
 def rectify_signal(signal):
     return np.abs(signal)
 
@@ -440,22 +432,6 @@ def get_continuous_features(features, idx, data_length=None):
             count += 1
     return continuous_features
 
-
-def get_new_event_metrics(patient_id, week, file, start_s, end_s):
-    print("take features from where the event locates")
-    downsampled_data_path = get_settings().downsampled_data_path
-    features = pl.read_parquet(
-        f"{downsampled_data_path}/p{patient_id}_wk{week}/{file[:-8]}200Hz_features.parquet"
-    )
-
-    features_event = features.filter(
-        ((pl.col("start_time") >= start_s) | (pl.col("end_time") > start_s))
-        & ((pl.col("end_time") <= end_s) | (pl.col("start_time") < end_s))
-    )
-    print(features_event.mean()[:, 3:])
-    features_event_mean = features_event.mean()[:, 2:]
-
-    return features_event_mean
 
 
 def add_new_prediction(

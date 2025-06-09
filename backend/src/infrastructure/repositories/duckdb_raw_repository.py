@@ -1,8 +1,14 @@
-# backend/src/infrastructure/repositories/duckdb_raw_repository.py
+from abc import ABC, abstractmethod
 import pandas as pd
+import polars as pl
 from src.extensions import duckdb_instance
 
-from .raw_signal_repository import RawSignalRepository
+
+class RawSignalRepository(ABC):
+    @abstractmethod
+    def load_raw(self, patient_id: int, week: str, night: str) -> pd.DataFrame:
+        """Return the downsampled CSV as a Pandas DataFrame."""
+        raise NotImplementedError
 
 
 class DuckDbRawRepository(RawSignalRepository):
@@ -12,8 +18,24 @@ class DuckDbRawRepository(RawSignalRepository):
     # keep `.load()` for the raw 2 000 Hz table unchanged …
 
     def load_raw(self, patient_id: int, week: str, night: str) -> pd.DataFrame:
-        query = "SELECT * FROM raw.recordings WHERE patient_id = ? AND week = ? AND file = ?"
+        query = "SELECT * FROM raw.Fnorm WHERE patient_id = ? AND week = ? AND file = ?"
         return self.conn.execute(query, (patient_id, week, night)).fetchdf()
+
+    def load_location_bites(
+        self, patient_id: int, week: str, night: str
+    ) -> pl.DataFrame:
+        # derive the actual location-Bites filename
+        short = night.rsplit("Fnorm.parquet", 1)[0]
+        loc_file = f"{short}location_Bites.parquet"
+
+        q = """
+            SELECT begin_idx, end_idx, duration_s
+            FROM   raw.location_bites
+            WHERE  patient_id = ? AND week = ? AND file = ?
+            ORDER  BY begin_idx
+        """
+        pdf = self.conn.execute(q, (patient_id, week, loc_file)).fetchdf()
+        return pl.from_pandas(pdf)
 
     # NEW helper for storing the 200 Hz frame
     def save_downsampled(self, df: pd.DataFrame, patient_id, week, night):
@@ -24,13 +46,13 @@ class DuckDbRawRepository(RawSignalRepository):
         df.insert(0, "patient_id", patient_id)
 
         self.conn.register("t200", df)
-        self.conn.execute("INSERT OR REPLACE INTO ds.signal_200hz SELECT * FROM t200")
+        self.conn.execute("INSERT OR REPLACE INTO downsampled.Fnorm SELECT * FROM t200")
         self.conn.unregister("t200")
 
     def exists_downsampled(self, patient_id: int, week: str, night: str) -> bool:
         query = """
             SELECT 1
-            FROM   ds.signal_200hz
+            FROM   downsampled.Fnorm
             WHERE  patient_id = ? AND week = ? AND file = ?
             LIMIT  1
         """
@@ -48,7 +70,7 @@ class DuckDbRawRepository(RawSignalRepository):
     ) -> pd.DataFrame:
         query = """
             SELECT sample_idx, MR, ML, ECG
-            FROM   ds.signal_200hz
+            FROM   downsampled.Fnorm
             WHERE  patient_id = ? AND week = ? AND file = ?
         """
         params = [patient_id, week, night]
